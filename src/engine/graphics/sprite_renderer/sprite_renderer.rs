@@ -234,7 +234,7 @@ impl SpriteRenderer {
     }
 
     pub fn render(&mut self, gfx: &Graphics, view_matrix: &Mat4, projection_matrix: &Mat4) {
-        self.sprite_sheets.for_each_mut(|_, sheet| {
+        for (_, sheet) in &mut self.sprite_sheets {
             gfx.glBindVertexArray(self.mesh.vao());
             gfx.glUseProgram(self.program.program());
             sheet.buffer_sprite_data(gfx);
@@ -249,9 +249,7 @@ impl SpriteRenderer {
 
             gfx.glDrawArraysInstanced(PrimitiveType::GL_TRIANGLES, 0, self.mesh.len() as _, sheet.render_queue.len() as u32);
             sheet.render_queue.clear();
-
-            Ok::<(), ()>(())
-        }).ok();
+        }
     }
 }
 

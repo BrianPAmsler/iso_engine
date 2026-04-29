@@ -1,4 +1,6 @@
-use std::{ops::Deref, pin::Pin};
+use std::{collections::VecDeque, fmt::Debug};
+
+use rand::RngExt as _;
 
 use super::error::Result;
 
@@ -8,38 +10,55 @@ enum Slot<T> {
     Hole { id: usize, next: usize }
 }
 
-#[derive(Debug)]
 pub struct VecAllocator<T> {
-    vec: Pin<Box<Vec<Slot<T>>>>,
+    id: u128,
+    vec: Vec<Slot<T>>,
     first_hole: usize,
     count: usize
 }
 
+impl<T: Debug> Debug for VecAllocator<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VecAllocator").field("vec", &self.vec).field("first_hole", &self.first_hole).field("count", &self.count).finish()
+    }
+}
+
+impl<T: Clone> Clone for VecAllocator<T> {
+    fn clone(&self) -> Self {
+        Self {
+            id: generate_id(),
+            vec: self.vec.clone(),
+            first_hole: self.first_hole.clone(),
+            count: self.count.clone()
+        }
+    }
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AllocationIndex {
-    ptr: *const (),
+    allocator_id: u128,
     index: usize,
     id: usize
 }
 
 impl AllocationIndex {
     pub fn null() -> AllocationIndex {
-        AllocationIndex { ptr: std::ptr::null(), index: 0, id: 0 }
-    }
-
-    pub fn as_raw(self) -> (*const(), usize, usize) {
-        (self.ptr, self.index, self.id)
+        AllocationIndex { allocator_id: 0, index: 0, id: 0 }
     }
 
     pub fn ptr_eq<T>(&self, allocator: &VecAllocator<T>) -> bool {
-        self.ptr == allocator.vec.deref() as *const Vec<Slot<T>> as *const ()
+        self.allocator_id == allocator.id
     }
 }
 
-impl<T: Clone + Unpin> VecAllocator<T> {
+fn generate_id() -> u128 {
+    rand::rng().random::<u128>().saturating_add(1)
+}
+
+impl<T: Clone> VecAllocator<T> {
     #[cfg(test)]
     fn from_raw(slice: &[Slot<T>]) -> VecAllocator<T> {
-        let mut vec = Box::pin(Vec::new());
+        let mut vec = Vec::new();
         vec.extend_from_slice(slice);
 
         let mut first_hole = vec.len();
@@ -59,15 +78,15 @@ impl<T: Clone + Unpin> VecAllocator<T> {
             panic!("No hole!");
         }
 
-        VecAllocator { first_hole, vec, count }
+        VecAllocator { id: generate_id(), first_hole, vec, count }
     }
 }
 
-impl<T: Unpin> VecAllocator<T> {
+impl<T> VecAllocator<T> {
     pub fn new() -> VecAllocator<T> {
-        let mut vec = Box::pin(Vec::new());
+        let mut vec = Vec::new();
         vec.push(Slot::Hole { id: 0, next: 0 });
-        VecAllocator { vec, first_hole: 0, count: 0 }
+        VecAllocator { id: generate_id(), vec, first_hole: 0, count: 0 }
     }
 
     pub fn capacity(&self) -> usize {
@@ -93,7 +112,7 @@ impl<T: Unpin> VecAllocator<T> {
                 }
 
                 // Place the new element
-                let index = AllocationIndex { ptr: self.vec.deref() as *const Vec<Slot<T>> as *const (), index: self.first_hole, id };
+                let index = AllocationIndex { allocator_id: self.id, index: self.first_hole, id };
                 self.vec[self.first_hole] = new_slot;
 
                 self.first_hole = next;
@@ -203,19 +222,8 @@ impl<T: Unpin> VecAllocator<T> {
         Iter { allocator: self, index: 0 }
     }
 
-    pub fn for_each_mut<E, F: FnMut(AllocationIndex, &mut T) -> std::result::Result<(), E>>(&mut self, mut f: F) -> std::result::Result<(), E> {
-        let ptr = self.vec.deref() as *const _ as *const _;
-        for (index, slot) in &mut self.vec.iter_mut().enumerate() {
-            match slot {
-                Slot::Element { id, value } => {
-                    let idx = AllocationIndex { ptr, index, id: *id };
-                    f(idx, value);
-                },
-                Slot::Hole { .. } => (),
-            }
-        }
-
-        Ok(())
+    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, T> {
+        IterMut { slice: &mut self.vec, allocator_id: self.id, index: 0  }
     }
 }
 
@@ -231,7 +239,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
         while self.index < self.allocator.vec.len() {
             match &self.allocator.vec[self.index] {
                 Slot::Element { id, value, .. } => {
-                    let index = AllocationIndex { ptr: self.allocator.vec.deref() as *const _ as *const (), index: self.index, id: *id };
+                    let index = AllocationIndex { allocator_id: self.allocator.id, index: self.index, id: *id };
                     self.index += 1;
                     return Some((index, &value));
                 },
@@ -240,6 +248,92 @@ impl<'a, T> Iterator for Iter<'a, T> {
         }
 
         None
+    }
+}
+
+impl<'a, T> IntoIterator for &'a VecAllocator<T> {
+    type Item = (AllocationIndex, &'a T);
+
+    type IntoIter = Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+pub struct IterMut<'a, T> {
+    slice: &'a mut [Slot<T>],
+    allocator_id: u128,
+    index: usize
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = (AllocationIndex, &'a mut T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut slice = std::mem::take(&mut self.slice);
+        let (mut first, mut rest) = slice.split_first_mut()?;
+
+        while !rest.is_empty() {
+            match first {
+                Slot::Element { id, value } => {
+                    self.slice = rest;
+                    let index = AllocationIndex { allocator_id: self.allocator_id, index: self.index, id: *id };
+                    self.index += 1;
+                    return Some((index, value))
+                },
+                Slot::Hole { .. } => {
+                    slice = rest;
+                    (first, rest) = slice.split_first_mut()?;
+                    self.index += 1;
+                },
+            }
+        }
+
+        None
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut VecAllocator<T> {
+    type Item = (AllocationIndex, &'a mut T);
+
+    type IntoIter = IterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+pub struct IntoIter<T> {
+    vec: VecDeque<Slot<T>>,
+}
+
+impl<T> Iterator for IntoIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.vec.is_empty() {
+            match self.vec.pop_front().unwrap() {
+                Slot::Element { value, .. } => {
+                    return Some(value);
+                },
+                Slot::Hole { .. } => ()
+            }
+        }
+
+        None
+    }
+}
+
+impl<T> IntoIterator for VecAllocator<T> {
+    type Item = T;
+
+    type IntoIter = IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            vec: self.vec.into(),
+        }
     }
 }
 
@@ -300,6 +394,54 @@ mod tests {
         }
     }
 
+    fn test_iter<T: std::fmt::Debug + Clone + Copy + Eq>(mut allocator: VecAllocator<T>, list: &[Slot<T>]) -> Result<(), String> {
+        let mut expected = Vec::new();
+        for slot in list {
+            match slot {
+                Slot::Element { value, .. } => expected.push(*value),
+                _ => ()
+            }
+        }
+
+        let mut test = Vec::new();
+        for (_, value) in &allocator {
+            test.push(*value);
+        }
+
+        let mut test_mut = Vec::new();
+        for (_, value) in &mut allocator {
+            test_mut.push(*value);
+        }
+
+        let mut test_consuming = Vec::new();
+        for value in allocator {
+            test_consuming.push(value);
+        }
+
+        if expected != test {
+            eprintln!("expected: {:?}", expected);
+            eprintln!("actual: {:?}", test);
+
+            return Err("VecAllocator.iter() failed!".into());
+        }
+
+        if expected != test_mut {
+            eprintln!("expected: {:?}", expected);
+            eprintln!("actual: {:?}", test_mut);
+
+            return Err("VecAllocater.iter_mut() failed!".into());
+        }
+
+        if expected != test_consuming {
+            eprintln!("expected: {:?}", expected);
+            eprintln!("actual: {:?}", test_consuming);
+
+            return Err("VecAllocater.iter_mut() failed!".into());
+        }
+
+        Ok(())
+    }
+
     fn compare_vecs<T: std::fmt::Debug>(a: &VecAllocator<T>, b: &VecAllocator<T>) -> Result<(), String> {
         let string_a = format!("{:?}", *a);
         let string_b = format!("{:?}", *b);
@@ -331,7 +473,7 @@ mod tests {
             Slot::Element { id: 0, value: 8 },
             Slot::Element { id: 0, value: 9 },
             Slot::Hole { id: 0, next: 10 }
-            ];
+        ];
 
         let expected = VecAllocator::from_raw(&ten_elements);
         test_vec.extend(ten_elements.into_iter());
@@ -348,7 +490,7 @@ mod tests {
             let choice: f32 = rng.random();
 
             if entries.len() == 0 || choice > 0.45 {
-                let value = rng.random_range(0..100);
+                let value: u128 = rng.random();
 
                 println!("Inserting value {}...", value);
                 insert(&mut test_vec, value);
@@ -356,6 +498,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             } else {
                 let index = rng.random_range(0..entries.len());
                 let entry = entries.remove(index);
@@ -366,6 +509,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             }
         }
         
@@ -374,7 +518,7 @@ mod tests {
             let choice: f32 = rng.random();
 
             if entries.len() == 0 || choice > 0.9 {
-                let value = rng.random_range(0..100);
+                let value: u128 = rng.random();
 
                 println!("Inserting value {}...", value);
                 insert(&mut test_vec, value);
@@ -382,6 +526,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             } else {
                 let index = rng.random_range(0..entries.len());
                 let entry = entries.remove(index);
@@ -392,6 +537,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             }
         }
 
@@ -400,7 +546,7 @@ mod tests {
             let choice: f32 = rng.random();
 
             if entries.len() == 0 || choice > 0.1 {
-                let value = rng.random_range(0..100);
+                let value: u128 = rng.random();
 
                 println!("Inserting value: {}...", value);
                 insert(&mut test_vec, value);
@@ -408,6 +554,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             } else {
                 let index = rng.random_range(0..entries.len());
                 let entry = entries.remove(index);
@@ -418,6 +565,7 @@ mod tests {
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
+                test_iter(allocator.clone(), &test_vec)?;
             }
         }
 
