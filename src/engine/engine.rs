@@ -7,10 +7,10 @@ use crate::engine::errors::{Error, GraphicsError, Result};
 use super::{game_object::World, graphics::Graphics, input::Input};
 
 pub struct Engine {
-    gfx: Option<Graphics>,
-    world: World,
+    pub gfx: Graphics,
+    pub world: World,
     fixed_tick_duration: f64,
-    input: Input,
+    pub input: Input,
     fixed_input: Input,
     error_queue: Vec<Error>
 }
@@ -22,42 +22,24 @@ pub enum WindowMode {
 }
 
 impl Engine {
-    pub fn new() -> Result<Engine> {
+    pub fn create_window(window_title: &str, width: u32, height: u32, window_mode: WindowMode) -> Result<Engine> {
+        let gfx = Graphics::init(window_title, width, height, window_mode)?;
+
         let world = World::new();
         
-        Ok(Engine { gfx: None, world, fixed_tick_duration: 1.0 / 60.0, error_queue: Vec::new(), input: Input::new(), fixed_input: Input::new() })
-    }
-
-    pub fn create_window(&mut self, window_title: &str, width: u32, height: u32, window_mode: WindowMode) -> Result<()> {
-        if self.gfx.is_some() {
-            return Err(GraphicsError::WindowCreatedError.into());
-        }
-        
-        self.gfx = Some(Graphics::init(window_title, width, height, window_mode)?);
-
-        Ok(())
-    }
-
-    pub fn get_graphics(&self) -> Result<&Graphics> {
-        self.gfx.as_ref().ok_or(GraphicsError::GraphicsNotInitializedError.into())
-    }
-
-    pub fn get_world(&mut self) -> &mut World {
-        &mut self.world
+        Ok(Engine { gfx, world, fixed_tick_duration: 1.0 / 60.0, error_queue: Vec::new(), input: Input::new(), fixed_input: Input::new() })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let mut last_tick = self.gfx.as_ref().unwrap().get_glfw_time();
+        let mut last_tick = self.gfx.get_glfw_time();
         let mut last_fixed_tick = last_tick;
         let mut fixed_tick_overflow = 0.0;
 
         self.log_errors();
 
-        while !self.gfx.as_ref().unwrap().should_close() {
-            let gfx = self.gfx.as_ref().unwrap();
-
-            gfx.poll_events();
-            for msg in gfx.flush_messages() {
+        while !self.gfx.should_close() {
+            self.gfx.poll_events();
+            for msg in self.gfx.flush_messages() {
                 match msg {
                     (_, WindowEvent::Key(key, _, Action::Press, _)) => {
                         let key_state = self.input.modify_key_state(key);
@@ -107,11 +89,11 @@ impl Engine {
 
             // TODO: move clear call to after game tick
 
-            gfx.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            self.gfx.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             
             // Game tick
-            let current_time = gfx.get_glfw_time();
-            self.world.update(self.gfx.as_ref().unwrap(), (current_time - last_tick) as f32, &self.input)?; // TODO: This is not supposed to crash, catch and log errors
+            let current_time = self.gfx.get_glfw_time();
+            World::update(self, (current_time - last_tick) as f32)?; // TODO: This is not supposed to crash, catch and log errors
             last_tick = current_time;
 
             self.input.modify_all_key_states(|key| {
@@ -129,7 +111,7 @@ impl Engine {
             // Add overflow to adjust for errors in timing
             if fixed_diff + fixed_tick_overflow >= 0.0 {
                 fixed_tick_overflow = f64::max(0.0, fixed_diff * 2.0);
-                self.world.fixed_update(self.gfx.as_ref().unwrap(), (current_time - last_fixed_tick) as f32, &self.fixed_input)?; // TODO: This is not supposed to crash, catch and log errors
+                World::fixed_update(self, (current_time - last_fixed_tick) as f32)?; // TODO: This is not supposed to crash, catch and log errors
                 last_fixed_tick = current_time;
 
                 self.fixed_input.modify_all_key_states(|key| {
@@ -144,25 +126,23 @@ impl Engine {
             }
 
             self.log_errors();
-
-            let gfx = self.gfx.as_ref().unwrap();
             match self.world.get_main_camera() {
                 Some(camera) => {
                     let mut camera = camera.borrow_mut();
-                    gfx.sprite_renderer().render(gfx, &camera.view_matrix(), &camera.projection_matrix());
+                    self.gfx.sprite_renderer().render(&self.gfx, &camera.view_matrix(), &camera.projection_matrix());
                 },
                 _ => ()
             }
 
             for (owner, mut component) in self.world.get_removed_components() {
-                component.on_remove(gfx, &self.world, owner)?; // TODO: This is not supposed to crash, catch and log errors
+                component.on_remove(self, owner)?; // TODO: This is not supposed to crash, catch and log errors
             }
 
             // Render
             // gfx.render();
 
             // Swap front and back buffers
-            gfx.swap_buffers();
+            self.gfx.swap_buffers();
         }
 
         Ok(())

@@ -23,9 +23,13 @@ pub struct FPSCounter {
 }
 
 impl Component for FPSCounter {
-    fn update(&mut self, gfx: &Graphics, _: &World, _: ObjectID, _: f32, _: &Input) -> Result<()> {
+    fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> Result<()> {
+        if engine.input.get_key_state(Key::Escape).press {
+            engine.gfx.set_should_close(true);
+        }
+        
         self.count += 1;
-        let current_tick = gfx.get_glfw_time() as f32;
+        let current_tick = engine.gfx.get_glfw_time() as f32;
 
         let delta = current_tick - self.last_update;
 
@@ -40,13 +44,10 @@ impl Component for FPSCounter {
         Ok(())
     }
 
-    fn fixed_update(&mut self, gfx: &Graphics, _: &World, _: ObjectID, _: f32, input: &Input) -> Result<()> {
-        if input.get_key_state(Key::Escape).press {
-            gfx.set_should_close(true);
-        }
+    fn fixed_update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> Result<()> {
 
         self.fixed_count += 1;
-        let current_tick = gfx.get_glfw_time() as f32;
+        let current_tick = engine.gfx.get_glfw_time() as f32;
 
         let delta = current_tick - self.last_fixed_update;
 
@@ -72,20 +73,20 @@ pub struct Renderer {
 }
 
 impl Component for Renderer {
-    fn init(&mut self, gfx: &Graphics, world: &World, _: ObjectID) -> Result<()> {
-        gfx.glClearColor(0.75, 0.75, 0.75, 1.0);
-        gfx.__get_glfw_mut().set_swap_interval(glfw::SwapInterval::None);
-        gfx.glEnable(EnableCap::GL_CULL_FACE);
-        gfx.glEnable(EnableCap::GL_DEPTH_TEST);
-        gfx.glDepthFunc(DepthFunction::GL_GREATER);
-        gfx.glClearDepth(0.0);
-        gfx.glCullFace(GL_BACK);
+    fn init(&mut self, engine: &mut Engine, _: ObjectID) -> Result<()> {
+        engine.gfx.glClearColor(0.75, 0.75, 0.75, 1.0);
+        engine.gfx.__get_glfw_mut().set_swap_interval(glfw::SwapInterval::None);
+        engine.gfx.glEnable(EnableCap::GL_CULL_FACE);
+        engine.gfx.glEnable(EnableCap::GL_DEPTH_TEST);
+        engine.gfx.glDepthFunc(DepthFunction::GL_GREATER);
+        engine.gfx.glClearDepth(0.0);
+        engine.gfx.glCullFace(GL_BACK);
 
-        let sprite1 = world.find_child(world.get_root(), "Sprite 1")?.unwrap();
-        let sprite2 = world.find_child(world.get_root(), "Sprite 2")?.unwrap();
+        let sprite1 = engine.world.find_child(engine.world.get_root(), "Sprite 1")?.unwrap();
+        let sprite2 = engine.world.find_child(engine.world.get_root(), "Sprite 2")?.unwrap();
 
-        let sprite1 = world.get_component::<Sprite>(sprite1)?;
-        let sprite2 = world.get_component::<Sprite>(sprite2)?;
+        let sprite1 = engine.world.get_component::<Sprite>(sprite1)?;
+        let sprite2 = engine.world.get_component::<Sprite>(sprite2)?;
 
         self.sprite1 = Some(sprite1);
         self.sprite2 = Some(sprite2);
@@ -93,92 +94,89 @@ impl Component for Renderer {
         Ok(())
     }
 
-    fn update(&mut self, gfx: &Graphics, world: &World, _: ObjectID, delta_time: f32, input: &Input) -> Result<()> {
+    fn update(&mut self, engine: &mut Engine, _: ObjectID, delta_time: f32) -> Result<()> {
         let mut camera = self.camera.borrow_mut();
         let speed = 10.0;
-        if input.get_key_state(Key::W).is_down {
+        if engine.input.get_key_state(Key::W).is_down {
             let pos = camera.position();
             camera.set_position(pos + normalize(vec3!(1, 0, 1)) * delta_time * speed);
         }
 
-        if input.get_key_state(Key::A).is_down {
+        if engine.input.get_key_state(Key::A).is_down {
             let pos = camera.position();
             camera.set_position(pos + normalize(vec3!(-1, 0, 1)) * delta_time * speed);
         }
-        if input.get_key_state(Key::S).is_down {
+        if engine.input.get_key_state(Key::S).is_down {
             let pos = camera.position();
             camera.set_position(pos + normalize(vec3!(-1, 0, -1)) * delta_time * speed);
         }
-        if input.get_key_state(Key::D).is_down {
+        if engine.input.get_key_state(Key::D).is_down {
             let pos = camera.position();
             camera.set_position(pos + normalize(vec3!(1, 0, -1)) * delta_time * speed);
         }
-        if input.get_key_state(Key::Space).is_down {
+        if engine.input.get_key_state(Key::Space).is_down {
             let pos = camera.position();
             camera.set_position(pos + vec3!(0, 1, 0) * delta_time * speed);
         }
-        if input.get_key_state(Key::LeftControl).is_down {
+        if engine.input.get_key_state(Key::LeftControl).is_down {
             let pos = camera.position();
             camera.set_position(pos + vec3!(0, -1, 0) * delta_time * speed);
         }
 
-        let mut sprite = world.borrow_component_mut::<Sprite>(self.sprite2.unwrap())?;
-        if input.get_key_state(Key::Up).is_down {
+        let mut sprite = engine.world.borrow_component_mut::<Sprite>(self.sprite2.unwrap())?;
+        if engine.input.get_key_state(Key::Up).is_down {
             sprite.data.position += vec3!(0, 0, 1) * delta_time * speed;
         }
 
-        if input.get_key_state(Key::Left).is_down {
+        if engine.input.get_key_state(Key::Left).is_down {
             sprite.data.position += vec3!(-1, 0, 0) * delta_time * speed;
         }
-        if input.get_key_state(Key::Down).is_down {
+        if engine.input.get_key_state(Key::Down).is_down {
             sprite.data.position += vec3!(0, 0, -1) * delta_time * speed;
         }
-        if input.get_key_state(Key::Right).is_down {
+        if engine.input.get_key_state(Key::Right).is_down {
             sprite.data.position += vec3!(1, 0, 0) * delta_time * speed;
         }
-        if input.get_key_state(Key::RightShift).is_down {
+        if engine.input.get_key_state(Key::RightShift).is_down {
             sprite.data.position += vec3!(0, 1, 0) * delta_time * speed;
         }
-        if input.get_key_state(Key::RightControl).is_down {
+        if engine.input.get_key_state(Key::RightControl).is_down {
             sprite.data.position += vec3!(0, -1, 0) * delta_time * speed;
         }
 
-        self.camera_size -= input.get_scroll_y() as f32;
+        self.camera_size -= engine.input.get_scroll_y() as f32;
 
         match camera.projection_mut() {
             Projection::Orthographic { width, .. } => *width = self.camera_size,
             _ => ()
         }
 
-        self.terrain_renderer.render(gfx, &mut self.terrain, camera.view_matrix(), camera.projection_matrix(), camera.position());
+        self.terrain_renderer.render(&engine.gfx, &mut self.terrain, camera.view_matrix(), camera.projection_matrix(), camera.position());
 
         Ok(())   
     }
 }
 
 fn start_game() -> Result<()> {
-    let mut engine = Engine::new()?;
-    engine.create_window("Test Window", 1280, 720, engine::WindowMode::Windowed)?;
+    let mut engine = Engine::create_window("Test Window", 1280, 720, engine::WindowMode::Windowed)?;
 
-    let world = engine.get_world();
-
-    let a = world.create_game_object("a", world.get_root())?;
+    let a = engine.world.create_game_object("a", engine.world.get_root())?;
 
     let mut sprite_sheet = SpriteSheet::new("sprite_sheet.png");
     sprite_sheet.add_sprite(0, 0, 512, 512);
     sprite_sheet.add_sprite(512, 512, 1024, 1024);
-    world.add_component(a, sprite_sheet)?;
+    engine.world.add_component(a, sprite_sheet)?;
     
-    let sprite1 = world.create_game_object("Sprite 1", world.get_root())?;
-    let sprite2 = world.create_game_object("Sprite 2", world.get_root())?;
+    let sprite1 = engine.world.create_game_object("Sprite 1", engine.world.get_root())?;
+    let sprite2 = engine.world.create_game_object("Sprite 2", engine.world.get_root())?;
 
     let mut sprite_component1 = Sprite::new("sprite_sheet.png", 0);
     sprite_component1.data.anchor = vec2!(0.5, 0);
     let mut sprite_component2 = Sprite::new("sprite_sheet.png", 1);
     sprite_component2.data.anchor = vec2!(0.5, 0);
 
-    world.add_component(sprite1, sprite_component1)?;
-    world.add_component(sprite2, sprite_component2)?;
+    engine.world.add_component(sprite1, sprite_component1)?;
+    engine.world.add_component(sprite2, sprite_component2)?;
     
     let camera = Rc::new(RefCell::new(Camera::new(
         Projection::Orthographic {
@@ -192,9 +190,7 @@ fn start_game() -> Result<()> {
         vec3!(0, 1, 0)
     )));
 
-    world.set_main_camera(camera.clone());
-    
-    let gfx = engine.get_graphics()?;
+    engine.world.set_main_camera(camera.clone());
 
     let grid = image::ImageReader::open("ground.png")?.decode()?;
     let mut grid = grid.to_rgb8();
@@ -207,15 +203,13 @@ fn start_game() -> Result<()> {
     let mut height_map: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, height_map).unwrap();
     imageops::flip_vertical_in_place(&mut height_map);
 
-    let terrain_renderer = TerrainRenderer::new(gfx)?;
-    let terrain = Terrain::from_raw(gfx, height_map.into_raw().into_boxed_slice(), grid.into_raw().into_boxed_slice(), 200, 200);
+    let terrain_renderer = TerrainRenderer::new(&engine.gfx)?;
+    let terrain = Terrain::from_raw(&engine.gfx, height_map.into_raw().into_boxed_slice(), grid.into_raw().into_boxed_slice(), 200, 200);
 
     let renderer = Renderer { terrain_renderer, camera_size: 10.0, terrain, camera, sprite1: None, sprite2: None  };
 
-    let world = engine.get_world();
-
-    world.add_component(a, FPSCounter::default())?;
-    world.add_component(a, renderer)?;
+    engine.world.add_component(a, FPSCounter::default())?;
+    engine.world.add_component(a, renderer)?;
 
     engine.run()?;
 

@@ -2,7 +2,7 @@ use std::{collections::VecDeque, i32, path::Path};
 
 use gl_types::{vec2, vec3};
 
-use crate::engine::{errors::Result, game_object::{ObjectID, World, component::Component}, graphics::{Graphics, image::Image, sprite_renderer::SpriteSheetID}, input::Input};
+use crate::engine::{Engine, errors::Result, game_object::{ObjectID, World, component::Component}, graphics::{Graphics, image::Image, sprite_renderer::SpriteSheetID}, input::Input};
 
 use super::SpriteData;
 
@@ -34,35 +34,35 @@ impl SpriteSheet {
 }
 
 impl Component for SpriteSheet {
-    fn init(&mut self, gfx: &Graphics, _world: &World, _owner: ObjectID) -> Result<()> {
+    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> Result<()> {
         let path = Path::new(self.filename.as_ref().unwrap());
         let sprite_map = Image::load_from_file(path)?;
 
         // If add_sprite_sheet returns None it should panic, so rewrap the unwrapped result.
-        self.id = Some(gfx.sprite_renderer().add_sprite_sheet(path.file_name().unwrap().to_str().unwrap(), gfx, 1024, sprite_map).unwrap());
+        self.id = Some(engine.gfx.sprite_renderer().add_sprite_sheet(path.file_name().unwrap().to_str().unwrap(), &engine.gfx, 1024, sprite_map).unwrap());
         self.filename = None;
 
         Ok(())
     }
 
-    fn fixed_update(&mut self, gfx: &Graphics, _world: &World, _owner: ObjectID, _delta_time: f32, _input: &Input) -> Result<()> {
+    fn fixed_update(&mut self, engine: &mut Engine, _owner: ObjectID, _delta_time: f32) -> Result<()> {
         let mut update = false;
         while !self.sprite_definitions.is_empty() {
             let (x, y, width, height) = self.sprite_definitions.pop_front().unwrap();
-            gfx.sprite_renderer().add_sprite(self.id.unwrap(), x, y, width, height);
+            engine.gfx.sprite_renderer().add_sprite(self.id.unwrap(), x, y, width, height);
             self.count += 1;
             update = true;
         }
 
         if update {
-            gfx.sprite_renderer().update_sprite_map(gfx, self.id.unwrap());
+            engine.gfx.sprite_renderer().update_sprite_map(&engine.gfx, self.id.unwrap());
         }
 
         Ok(())
     }
 
-    fn on_remove(&mut self, gfx: &Graphics, _world: &World, _owner: ObjectID) -> Result<()> {
-        gfx.sprite_renderer().remove_sprite_sheet(gfx, self.id.unwrap());
+    fn on_remove(&mut self, engine: &mut Engine, _owner: ObjectID) -> Result<()> {
+        engine.gfx.sprite_renderer().remove_sprite_sheet(&engine.gfx, self.id.unwrap());
 
         Ok(())
     }
@@ -97,18 +97,18 @@ impl Sprite {
 }
 
 impl Component for Sprite {
-    fn init(&mut self, gfx: &Graphics, _world: &World, _owner: ObjectID) -> Result<()> {
+    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> Result<()> {
         self.sprite_sheet_id = SpriteSheetEnum::ID(match &self.sprite_sheet_id {
             SpriteSheetEnum::ID(_) => panic!("no"),
-            SpriteSheetEnum::Name(name) => gfx.sprite_renderer().get_sprite_sheet_by_name(name).ok_or(format!("Sprite sheet \"{}\" not found.", name))?,
+            SpriteSheetEnum::Name(name) => engine.gfx.sprite_renderer().get_sprite_sheet_by_name(name).ok_or(format!("Sprite sheet \"{}\" not found.", name))?,
         });
 
         Ok(())
     }
 
-    fn update(&mut self, gfx: &Graphics, _world: &World, _owner: ObjectID, _delta_time: f32, _input: &Input) -> Result<()> {
+    fn update(&mut self, engine: &mut Engine, _owner: ObjectID, _delta_time: f32) -> Result<()> {
         let SpriteSheetEnum::ID(sprite_sheet) = self.sprite_sheet_id else { return Ok(()); };
-        gfx.sprite_renderer().queue_sprite_instance(
+        engine.gfx.sprite_renderer().queue_sprite_instance(
             self.data,
             sprite_sheet
         );
