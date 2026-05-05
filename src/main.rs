@@ -4,7 +4,7 @@ mod engine;
 
 use std::{cell::RefCell, rc::Rc};
 
-use engine::{errors::{Error, Result}, game_object::{component::Component, ObjectID, World}, graphics::Graphics, input::Input, Engine};
+use engine::{errors::{Error, Result}, game_object::{component::Component, ObjectID}, Engine};
 use gl46::GL_BACK;
 use gl_types::{geometric::normalize, vec2, vec3};
 use glfw::Key;

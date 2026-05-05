@@ -2,7 +2,7 @@
 use gl46::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT};
 use glfw::{Action, WindowEvent};
 
-use crate::engine::{errors::{Error, Result}, graphics::sprite_renderer::{self, SpriteRenderer}};
+use crate::engine::{errors::{Error, Result}, graphics::sprite_renderer::SpriteRenderer};
 
 use super::{game_object::World, graphics::Graphics, input::Input};
 

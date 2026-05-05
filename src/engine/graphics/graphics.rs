@@ -1,11 +1,11 @@
-use std::{cell::{Ref, RefCell, RefMut}, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, ops::{Deref, Not}, os::raw::c_void};
+use std::{cell::RefCell, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, ops::{Deref, Not}, os::raw::c_void};
 
 use glfw::{fail_on_errors, Glfw, Context, PWindow, GlfwReceiver, WindowEvent, Monitor};
 
 use libc::strlen;
 use libffi::high::Closure0;
 
-use crate::engine::{WindowMode, errors::{Error, GraphicsError, Result}, graphics::{gl_enums::PixelStoreParameter, sprite_renderer::SpriteRenderer}};
+use crate::engine::{WindowMode, errors::{Error, GraphicsError, Result}, graphics::gl_enums::PixelStoreParameter};
 
 use super::GLWrapper;
 
@@ -216,12 +216,12 @@ impl Graphics {
     }
 
     // This will be deleted once glfw is properly wrapped
-    pub fn __get_glfw<'a>(&'a self) -> &Glfw {
+    pub fn __get_glfw<'a>(&'a self) -> &'a Glfw {
         &self.glfw
     }
 
     // This will be deleted once glfw is properly wrapped
-    pub fn __get_glfw_mut<'a>(&'a mut self) ->&mut Glfw {
+    pub fn __get_glfw_mut<'a>(&'a mut self) ->&'a mut Glfw {
         &mut self.glfw
     }
 

@@ -1,7 +1,7 @@
-use crate::engine::{Engine, errors::Result, game_object::World, input::Input};
+use crate::engine::{Engine, errors::Result};
 use downcast_rs::{Downcast, impl_downcast};
 
-use crate::engine::{game_object::ObjectID, graphics::Graphics};
+use crate::engine::game_object::ObjectID;
 
 #[allow(unused)]
 pub trait Component: Downcast {

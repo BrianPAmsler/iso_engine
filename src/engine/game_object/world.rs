@@ -1,6 +1,6 @@
 use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, rc::Rc};
 
-use crate::engine::{self, Engine, data_structures::{AllocationIndex, VecAllocator}, errors::{ObjectError, Result}, graphics::{Camera, Graphics}, input::Input};
+use crate::engine::{Engine, data_structures::{AllocationIndex, VecAllocator}, errors::{ObjectError, Result}, graphics::Camera};
 
 use super::{component::{components::Transform, Component}, game_object::GameObject};
 
