@@ -2,15 +2,16 @@
 use gl46::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT};
 use glfw::{Action, WindowEvent};
 
-use crate::engine::errors::{Error, GraphicsError, Result};
+use crate::engine::{errors::{Error, Result}, graphics::sprite_renderer::{self, SpriteRenderer}};
 
 use super::{game_object::World, graphics::Graphics, input::Input};
 
 pub struct Engine {
     pub gfx: Graphics,
     pub world: World,
-    fixed_tick_duration: f64,
     pub input: Input,
+    pub(in crate::engine) sprite_renderer: SpriteRenderer,
+    fixed_tick_duration: f64,
     fixed_input: Input,
     error_queue: Vec<Error>
 }
@@ -26,8 +27,10 @@ impl Engine {
         let gfx = Graphics::init(window_title, width, height, window_mode)?;
 
         let world = World::new();
+
+        let sprite_renderer = SpriteRenderer::new(&gfx)?;
         
-        Ok(Engine { gfx, world, fixed_tick_duration: 1.0 / 60.0, error_queue: Vec::new(), input: Input::new(), fixed_input: Input::new() })
+        Ok(Engine { gfx, world, sprite_renderer, fixed_tick_duration: 1.0 / 60.0, error_queue: Vec::new(), input: Input::new(), fixed_input: Input::new() })
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -129,7 +132,7 @@ impl Engine {
             match self.world.get_main_camera() {
                 Some(camera) => {
                     let mut camera = camera.borrow_mut();
-                    self.gfx.sprite_renderer().render(&self.gfx, &camera.view_matrix(), &camera.projection_matrix());
+                    self.sprite_renderer.render(&self.gfx, &camera.view_matrix(), &camera.projection_matrix());
                 },
                 _ => ()
             }

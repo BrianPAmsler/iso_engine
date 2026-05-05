@@ -85,9 +85,8 @@ fn get_monitor_fingerprint(monitor: &Monitor) -> u64 {
 
 pub struct Graphics {
     gl: GLWrapper,
-    glfw: RefCell<Glfw>,
-    sprite_renderer: RefCell<Option<SpriteRenderer>>,
-    window: RefCell<PWindow>,
+    glfw: Glfw,
+    window: PWindow,
     events: GlfwReceiver<(f64, WindowEvent)>
 }
 
@@ -140,15 +139,12 @@ impl Graphics {
             }
         })?;
 
-        let glfw = RefCell::new(glfw);
+        let window = window.into_inner();
 
         unsafe { gl.glPixelStorei(PixelStoreParameter::GL_UNPACK_ALIGNMENT, 1) };
 
 
-        let gfx = Graphics { gl, glfw, sprite_renderer: RefCell::new(None), window, events };
-        
-        let sprite_renderer = SpriteRenderer::new(&gfx)?;
-        gfx.sprite_renderer.replace(Some(sprite_renderer));
+        let gfx = Graphics { gl, glfw, window, events };
 
         Ok(gfx)
     }
@@ -162,7 +158,7 @@ impl Graphics {
         window.make_current();
         window.set_key_polling(true);
 
-        let window = RefCell::new(window);
+        let window = window;
 
         let gl = GLWrapper::init_gl(|t| {
             // freaking c strings...
@@ -173,18 +169,16 @@ impl Graphics {
             }
         })?;
 
-        let glfw = RefCell::new(glfw);
+        unsafe { gl.glPixelStorei(PixelStoreParameter::GL_UNPACK_ALIGNMENT, 1) };
 
-        let gfx = Graphics { gl, glfw, sprite_renderer: RefCell::new(None), window, events };
-        
-        let sprite_renderer = SpriteRenderer::new(&gfx)?;
-        gfx.sprite_renderer.replace(Some(sprite_renderer));
+
+        let gfx = Graphics { gl, glfw, window, events };
 
         Ok(gfx)
     }
 
-    pub fn get_window_mode(&self) -> WindowMode {
-        self.window.borrow().with_window_mode(|mode| {
+    pub fn window_mode(&self) -> WindowMode {
+        self.window.with_window_mode(|mode| {
             match mode {
                 glfw::WindowMode::FullScreen(monitor) => WindowMode::FullScreen(Some(get_monitor_fingerprint(monitor))),
                 glfw::WindowMode::Windowed => WindowMode::Windowed,
@@ -192,20 +186,16 @@ impl Graphics {
         })
     }
 
-    pub(in crate::engine) fn sprite_renderer<'a>(&'a self) -> RefMut<'a, SpriteRenderer> {
-        RefMut::map(self.sprite_renderer.borrow_mut(), |v| v .as_mut().unwrap())
+    pub fn swap_buffers(&mut self) {
+        self.window.swap_buffers();
     }
 
-    pub fn swap_buffers(&self) {
-        self.window.borrow_mut().swap_buffers();
-    }
-
-    pub fn poll_events(&self) {
-        self.glfw.borrow_mut().poll_events();
+    pub fn poll_events(&mut self) {
+        self.glfw.poll_events();
     }
 
     pub fn get_glfw_time(&self) -> f64 {
-        self.glfw.borrow().get_time()
+        self.glfw.get_time()
     }
 
     pub fn flush_messages(&self) -> std::vec::IntoIter<(f64, WindowEvent)> {
@@ -213,30 +203,30 @@ impl Graphics {
     }
 
     pub fn should_close(&self) -> bool {
-        self.window.borrow().should_close()
+        self.window.should_close()
     }
 
-    pub fn set_should_close(&self, value: bool) {
-        self.window.borrow_mut().set_should_close(value);
+    pub fn set_should_close(&mut self, value: bool) {
+        self.window.set_should_close(value);
     }
 
-    pub fn set_fullscreen(&self, monitor: Monitor) {
+    pub fn set_fullscreen(&mut self, monitor: Monitor) {
         let mode = monitor.get_video_mode().unwrap();
-        self.window.borrow_mut().set_monitor(glfw::WindowMode::FullScreen(&monitor), 0, 0, mode.width, mode.height, None);
+        self.window.set_monitor(glfw::WindowMode::FullScreen(&monitor), 0, 0, mode.width, mode.height, None);
     }
 
     // This will be deleted once glfw is properly wrapped
-    pub fn __get_glfw<'a>(&'a self) -> Ref<'a, Glfw> {
-        self.glfw.borrow()
+    pub fn __get_glfw<'a>(&'a self) -> &Glfw {
+        &self.glfw
     }
 
     // This will be deleted once glfw is properly wrapped
-    pub fn __get_glfw_mut<'a>(&'a self) -> RefMut<'a, Glfw> {
-        self.glfw.borrow_mut()
+    pub fn __get_glfw_mut<'a>(&'a mut self) ->&mut Glfw {
+        &mut self.glfw
     }
 
-    pub fn is_supported(&self, gl_fn_name: &'static str) -> bool {
-        self.window.borrow_mut().get_proc_address(&gl_fn_name).is_null().not()
+    pub fn is_supported(&mut self, gl_fn_name: &'static str) -> bool {
+        self.window.get_proc_address(&gl_fn_name).is_null().not()
     }
 
     // // This will be deleted once window is properly wrapped
