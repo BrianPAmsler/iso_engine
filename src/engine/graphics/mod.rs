@@ -1,13 +1,12 @@
 mod graphics;
-mod texture;
 mod camera;
 
 pub mod sprite_renderer;
 pub mod error;
 pub mod terrain;
+pub mod texture;
 
 pub use graphics::*;
-pub use texture::*;
 pub use camera::*;
 
 #[cfg(test)]

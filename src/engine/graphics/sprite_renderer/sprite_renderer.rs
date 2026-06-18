@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 use gl_types::{matrices::{Mat4, MatN}, vec2, vec4, vectors::{Vec2, Vec3, VecN}};
-use image::DynamicImage;
+use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
-use vulkano::buffer::{BufferContents, Subbuffer};
+use vulkano::{buffer::{BufferContents, Subbuffer}, padded::Padded};
 use vulkano::command_buffer::DrawIndexedIndirectCommand;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 
-use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{AlignedVec3, Binding, BufferType, Graphics, PipelineBuilder, PipelineHandle, builder::TextureBuilder, sprite_renderer::error::{AddSpritesheetError, SpriteRendererBufferError, SpriteRendererUpdateError, UnknownSpriteSheet}}}, error::Result};
+use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{AlignedVec3, Binding, BufferType, Graphics, PipelineBuilder, PipelineHandle, sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::{AddAnimatedSpriteError, AddSpritesheetError, SpriteRendererBufferError, SpriteRendererUpdateError, UnknownSpriteSheet}}, texture::builder::TextureBuilder}}, error::Result};
 
 const UNIFORMS_BINDING: u32 = 1;
 const SPRITE_SHEET_BINDING: u32 = 2;
@@ -154,14 +154,19 @@ struct InputData {
 #[derive(Clone, Copy)]
 pub struct SpriteSheetID(AllocationIndex);
 
+#[derive(Clone, Copy)]
+pub struct AnimatedSpriteID(AllocationIndex);
+
 pub struct SpriteRenderer {
     sprite_sheets: VecAllocator<SpriteSheet>,
+    animated_sprites: VecAllocator<AnimatedSprite>,
     sprite_sheet_index: HashMap<String, AllocationIndex>,
+    animated_sprite_index: HashMap<String, AllocationIndex>
 }
 
 impl SpriteRenderer {
     pub fn new() -> SpriteRenderer {
-        SpriteRenderer { sprite_sheets: VecAllocator::new(), sprite_sheet_index: HashMap::new() }
+        SpriteRenderer { sprite_sheets: VecAllocator::new(), animated_sprites: VecAllocator::new(), sprite_sheet_index: HashMap::new(), animated_sprite_index: HashMap::new() }
     }
 
     pub fn add_sprite_sheet(&mut self, name: &str, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: DynamicImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
@@ -222,6 +227,18 @@ impl SpriteRenderer {
         Ok(SpriteSheetID(id))
     }
 
+    pub fn add_animated_sprite(&mut self, gfx: &mut Graphics, name: String, frames: Vec<RgbaImage>) -> Result<AnimatedSpriteID, AddAnimatedSpriteError> {
+        let texture = TextureBuilder::from_frames(frames)?
+            .finish(& *gfx)?;
+
+        let sprite = AnimatedSprite::new(gfx, texture, name.clone())?;
+
+        let id = self.animated_sprites.insert(sprite);
+        self.animated_sprite_index.insert(name, id);
+
+        Ok(AnimatedSpriteID(id))
+    }
+
     pub fn remove_sprite_sheet(&mut self, gfx: &mut Graphics, sprite_sheet: SpriteSheetID) {
         let Ok(old) = self.sprite_sheets.remove(sprite_sheet.0) else { return };
 
@@ -231,6 +248,17 @@ impl SpriteRenderer {
 
     pub fn get_sprite_sheet_by_name(&self, name: &str) -> Option<SpriteSheetID> {
         self.sprite_sheet_index.get(name).map(|idx| SpriteSheetID(*idx))
+    }
+
+    pub fn get_animated_sprite_by_name(&self, name: &str) -> Option<AnimatedSpriteID> {
+        self.animated_sprite_index.get(name).map(|idx| AnimatedSpriteID(*idx))
+    }
+
+    pub fn remove_animated_sprite(&mut self, gfx: &mut Graphics, animated_sprite: AnimatedSpriteID) {
+        let Ok(old) = self.animated_sprites.remove(animated_sprite.0) else { return };
+
+        self.animated_sprite_index.remove(&old.name);
+        gfx.remove_pipeline(old.pipeline);
     }
 
     pub fn queue_sprite_instance(&mut self, sprite: SpriteData, sprite_sheet: SpriteSheetID) {
@@ -248,6 +276,18 @@ impl SpriteRenderer {
         };
 
         sheet.render_queue.push(sprite_data);
+    }
+
+    pub fn queue_animated_sprite_instance(&mut self, sprite: AnimatedSpriteID, sprite_data: AnimatedSpriteData) {
+        let Ok(sprite) = self.animated_sprites.get_mut(sprite.0) else { return };
+        
+        sprite.render_queue.push(Padded(sprite_data.into()));
+    }
+
+    pub fn get_total_frames(&self, sprite: AnimatedSpriteID) -> Option<u32> {
+        self.animated_sprites.get(sprite.0).ok().map(|sprite| {
+            sprite.depth()
+        })
     }
 
     pub fn update(&mut self, gfx: &Graphics, view_matrix: &Mat4, projection_matrix: &Mat4) -> Result<(), SpriteRendererUpdateError> {
@@ -282,6 +322,10 @@ impl SpriteRenderer {
                 texel_offset,
             };
             sheet.render_queue.clear();
+        }
+
+        for (_, sprite) in &mut  self.animated_sprites {
+            sprite.update(gfx, view_matrix, projection_matrix)?;
         }
 
         Ok(())

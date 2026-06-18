@@ -2,7 +2,7 @@ use error_union::error_union;
 use thiserror::Error;
 use vulkano::{command_buffer::CommandBufferExecError, pipeline::layout::IntoPipelineLayoutCreateInfoError, sync::HostAccessError};
 
-use crate::{engine::{error::NewEngineErorr, graphics::{sprite_renderer::error::AddSpritesheetError, terrain::{error::TerrainFromRawError, terrain_renderer::error::TerrainRendererUpdateError}, texture::error::TextureBuilderError}}, error::EngineError};
+use crate::{engine::{error::NewEngineErorr, graphics::{sprite_renderer::error::{AddSpritesheetError, NewAnimatedSpriteError}, terrain::{error::TerrainFromRawError, terrain_renderer::error::TerrainRendererUpdateError}, texture::error::TextureBuilderError}}, error::EngineError};
 
 type ValidatedVulkanError = vulkano::Validated<vulkano::VulkanError>;
 type ValidatedAllocateBufferError = vulkano::Validated<vulkano::buffer::AllocateBufferError>;
@@ -49,7 +49,7 @@ impl EngineError for IntoPipelineLayoutCreateInfoError {}
 
 error_union!(ValidatedAllocateImageError, vulkano::LoadingError, winit::raw_window_handle::HandleError, ValidatedVulkanError, vulkano::VulkanError, vulkano::swapchain::FromWindowError, NoPhysicalDevices, SRGBUnsupported as NewGraphicsError into NewEngineErorr);
 error_union!(ValidatedVulkanError, NoLayout, InvalidEntryPoint, BoxedValidationError as DescriptorSetError into PipelineBuilderError);
-error_union!(ValidatedAllocateBufferError, ValidatedVulkanError, NoLayout, InvalidEntryPoint, BoxedValidationError, IntoPipelineLayoutCreateInfoError as PipelineBuilderError into AddSpritesheetError, TerrainFromRawError);
+error_union!(ValidatedAllocateBufferError, ValidatedVulkanError, NoLayout, InvalidEntryPoint, BoxedValidationError, IntoPipelineLayoutCreateInfoError as PipelineBuilderError into AddSpritesheetError, TerrainFromRawError, NewAnimatedSpriteError);
 error_union!(ValidatedAllocateImageError, ValidatedVulkanError, as GetFramebuffersError into NewGraphicsError, UpdatePipelinesError);
 error_union!(ValidatedAllocateImageError, ValidatedVulkanError, InvalidEntryPoint, BoxedValidationError, IntoPipelineLayoutCreateInfoError as UpdatePipelinesError);
 error_union!(ValidatedVulkanError, InvalidEntryPoint, BoxedValidationError, IntoPipelineLayoutCreateInfoError as GetPipelineError into PipelineBuilderError, UpdatePipelinesError);
