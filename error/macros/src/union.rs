@@ -1,7 +1,7 @@
 use itertools::Itertools as _;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, format_ident, quote};
-use syn::{Attribute, GenericArgument, Ident, Lifetime, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned};
+use syn::{Attribute, GenericArgument, Ident, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated};
 
 macro_rules! auto_generate_error {
     ($type_: expr) => {{

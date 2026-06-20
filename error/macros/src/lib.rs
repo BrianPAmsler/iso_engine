@@ -1,5 +1,4 @@
-use quote::{format_ident, quote};
-use syn::{Ident, Visibility, parse::Parse, parse_macro_input};
+use quote::quote;
 
 mod derive;
 mod union;

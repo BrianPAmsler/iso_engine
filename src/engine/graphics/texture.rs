@@ -49,7 +49,7 @@ impl Texture {
 pub mod builder {
     use image::RgbaImage;
     use itertools::Itertools;
-    use vulkano::{format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::{ImageView, ImageViewCreateInfo}}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
+    use vulkano::{format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::ImageView}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
 
     use crate::{engine::graphics::{Graphics, texture::{Texture, error::{InvalidFrameDimensions, TextureBuilderError}}}, error::Result};
 
