@@ -6,7 +6,7 @@ use std::{cell::RefCell, rc::Rc};
 use gl_types::{geometric::normalize, vec2, vec3};
 use regex::Regex;
 
-use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection, sprite_renderer::components::{Sprite, SpriteSheet}, terrain::Terrain}, input::Key}, error::{ExplicitUnwrap, TryUnwrap, any::{Error, Result}}};
+use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection, sprite_renderer::components::{AnimatedSprite, AnimatedSpriteLoader, Sprite, SpriteSheet}, terrain::Terrain}, input::Key}, error::{ExplicitUnwrap, TryUnwrap, any::{Error, Result}}};
 
 #[derive(Clone, Default)]
 pub struct FPSCounter {
@@ -143,17 +143,38 @@ fn start_game() -> Result<()> {
     sprite_sheet.add_sprite(0, 0, 512, 512);
     sprite_sheet.add_sprite(512, 512, 1024, 1024);
     engine.world.add_component(a, sprite_sheet)?;
+
+    let animation = AnimatedSpriteLoader::new("test animation", "test frames");
+    
+    engine.world.add_component(a, animation)?;
     
     let sprite1 = engine.world.create_game_object("Sprite 1", engine.world.get_root())?;
     let sprite2 = engine.world.create_game_object("Sprite 2", engine.world.get_root())?;
+    let sprite3 = engine.world.create_game_object("Sprite 3", engine.world.get_root())?;
+    let sprite4 = engine.world.create_game_object("Sprite 4", engine.world.get_root())?;
+
+    let mut transform = engine.world.get_transform(sprite3)?;
+    *transform.position_mut() = vec3!(2, 0, 0);
+
+    let mut transform = engine.world.get_transform(sprite4)?;
+    *transform.position_mut() = vec3!(0, 0, 2);
+    *transform.scale_mut() = vec3!(2, 2, 2);
 
     let mut sprite_component1 = Sprite::new("sprite_sheet.png", 0);
     sprite_component1.anchor = vec2!(0.5, 0);
     let mut sprite_component2 = Sprite::new("sprite_sheet.png", 1);
     sprite_component2.anchor = vec2!(0.5, 0);
+    let mut sprite_component3 = AnimatedSprite::new("test animation", 60.0);
+    sprite_component3.anchor = vec2!(0.5, 0);
+    let mut sprite_component4 = AnimatedSprite::new("test animation", 60.0);
+    sprite_component4.anchor = vec2!(0.5, 0);
+    sprite_component4.current_frame = 15.0;
+    sprite_component4.interpolate = true;
 
     engine.world.add_component(sprite1, sprite_component1)?;
     engine.world.add_component(sprite2, sprite_component2)?;
+    engine.world.add_component(sprite3, sprite_component3)?;
+    engine.world.add_component(sprite4, sprite_component4)?;
     
     let camera = Rc::new(RefCell::new(Camera::new(
         Projection::Orthographic {

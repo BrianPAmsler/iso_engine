@@ -4,7 +4,7 @@ use crate::error::{ExplicitUnwrap, Result};
 use image::{RgbaImage, imageops};
 use lazy_static::lazy_static;
 
-use crate::{engine::graphics::{Graphics, Texture, builder::TextureBuilder, texture::error::TextureBuilderError}};
+use crate::{engine::graphics::{Graphics, texture::{Texture, builder::TextureBuilder}, texture::error::TextureBuilderError}};
 
 struct SpriteCell {
     x: u32,

@@ -1,6 +1,6 @@
 use vulkano::{Validated, VulkanError, buffer::AllocateBufferError, sync::HostAccessError};
 
-use crate::{engine::graphics::{error::{GetBindingError, PipelineBuilderError, SetIndirectBufferError}, texture::error::TextureBuilderError}, error::{self as errors_module, Error, union}};
+use crate::{engine::graphics::{error::{GetBindingError, PipelineBuilderError, SetIndirectBufferError}, texture::error::{InvalidFrameDimensions, TextureBuilderError}}, error::{self as errors_module, Error, union}};
 
 #[derive(Error, Debug)]
 #[error("Invalid sprite sheet \"{sheet}\"")]
@@ -9,3 +9,5 @@ pub struct UnknownSpriteSheet { pub sheet: String }
 union!(Validated<VulkanError>, UnknownSpriteSheet, Validated<AllocateBufferError>, PipelineBuilderError, GetBindingError, HostAccessError, TextureBuilderError as AddSpritesheetError);
 union!(GetBindingError, HostAccessError as SpriteRendererBufferError);
 union!(GetBindingError, HostAccessError, SetIndirectBufferError, SpriteRendererBufferError as SpriteRendererUpdateError);
+union!(Validated<VulkanError>, Validated<AllocateBufferError>, PipelineBuilderError as NewAnimatedSpriteError);
+union!(NewAnimatedSpriteError, InvalidFrameDimensions, TextureBuilderError as AddAnimatedSpriteError);
