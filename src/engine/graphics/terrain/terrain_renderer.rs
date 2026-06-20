@@ -130,6 +130,6 @@ pub mod error {
     use crate::{engine::graphics::{error::{GetBindingError, SetIndirectBufferError}, texture::error::TextureBuilderError}, error as errors_module};
 
 
-    union!(Validated<VulkanError>, TextureBuilderError as NewTerrainRendererError);
+    union!(#[use_debug] Validated<VulkanError>, TextureBuilderError as NewTerrainRendererError);
     union!(SetIndirectBufferError, HostAccessError, GetBindingError as TerrainRendererUpdateError);
 }

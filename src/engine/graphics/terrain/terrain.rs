@@ -299,7 +299,7 @@ pub mod error {
 
     use crate::{engine::graphics::error::BufferImageError, error::Uninitialized};
 
-    union!(Validated<AllocateBufferError>, PipelineBuilderError, TextureBuilderError as TerrainFromRawError);
+    union!(#[use_debug] Validated<AllocateBufferError>, PipelineBuilderError, TextureBuilderError as TerrainFromRawError);
     union!(OutOfBounds<(u32, u32)>, Uninitialized as CellAccessError);
     union!(Uninitialized, BufferImageError as UpdateTextureError);
 }

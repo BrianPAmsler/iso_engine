@@ -6,8 +6,8 @@ use crate::{engine::graphics::{error::{GetBindingError, PipelineBuilderError, Se
 #[error("Invalid sprite sheet \"{sheet}\"")]
 pub struct UnknownSpriteSheet { pub sheet: String }
 
-union!(Validated<VulkanError>, UnknownSpriteSheet, Validated<AllocateBufferError>, PipelineBuilderError, GetBindingError, HostAccessError, TextureBuilderError as AddSpritesheetError);
+union!(#[use_debug] Validated<VulkanError>, UnknownSpriteSheet, #[use_debug] Validated<AllocateBufferError>, PipelineBuilderError, GetBindingError, HostAccessError, TextureBuilderError as AddSpritesheetError);
 union!(GetBindingError, HostAccessError as SpriteRendererBufferError);
 union!(GetBindingError, HostAccessError, SetIndirectBufferError, SpriteRendererBufferError as SpriteRendererUpdateError);
-union!(Validated<VulkanError>, Validated<AllocateBufferError>, PipelineBuilderError as NewAnimatedSpriteError);
+union!(#[use_debug] Validated<VulkanError>, #[use_debug] Validated<AllocateBufferError>, PipelineBuilderError as NewAnimatedSpriteError);
 union!(NewAnimatedSpriteError, InvalidFrameDimensions, TextureBuilderError as AddAnimatedSpriteError);

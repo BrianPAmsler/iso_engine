@@ -160,21 +160,14 @@ impl Component for AnimatedSprite {
             self.current_frame = (self.current_frame + advance_frames) % self.total_frames as f32;
         }
 
-        let current_frame = if self.interpolate {
-            self.current_frame
-        } else {
-            self.current_frame.round()
-        };
-
-        let depth = (current_frame + 0.5) * (1.0 / self.total_frames as f32);
-
+        let frame = self.current_frame as u32;
         engine.sprite_renderer.queue_animated_sprite_instance(
             sprite,
             AnimatedSpriteData {
                 position: *transform.position(),
                 anchor: self.anchor,
                 dimensions: transform.scale().xy(),
-                depth
+                frame
             },
         );
 

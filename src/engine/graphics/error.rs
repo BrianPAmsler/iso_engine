@@ -27,19 +27,19 @@ pub struct InvalidPipelineHandle;
 #[error("Invalid binding.")]
 pub struct InvalidBinding;
 
-union!(Validated<VulkanError> as GetRenderPassError);
+union!(#[use_debug] Validated<VulkanError> as GetRenderPassError);
 
-union!(LoadingError, HandleError, NoPhysicalDevices, SRGBUnsupported, Validated<VulkanError>, VulkanError, FromWindowError, GetFramebuffersError, GetRenderPassError as NewGraphicsError);
+union!(LoadingError, HandleError, NoPhysicalDevices, SRGBUnsupported, #[use_debug] Validated<VulkanError>, VulkanError, FromWindowError, GetFramebuffersError, GetRenderPassError as NewGraphicsError);
 
-union!(NoLayout, Validated<VulkanError>, as DescriptorSetError);
+union!(NoLayout, #[use_debug] Validated<VulkanError>, as DescriptorSetError);
 
-union!(GetPipelineError, DescriptorSetError, Validated<AllocateBufferError> as PipelineBuilderError);
+union!(GetPipelineError, DescriptorSetError, #[use_debug] Validated<AllocateBufferError> as PipelineBuilderError);
 
-union!(Validated<AllocateImageError>, Validated<VulkanError> as GetFramebuffersError);
-union!(Validated<VulkanError>, GetPipelineError, GetCommandBuffersError, GetFramebuffersError as UpdatePipelinesError);
-union!(InvalidEntryPoint, Validated<VulkanError>, Box<ValidationError>, IntoPipelineLayoutCreateInfoError as GetPipelineError);
-union!(Validated<VulkanError>: ValidatedVulkanError, Box<ValidationError> as GetCommandBuffersError);
-union!(CommandBufferExecError, Validated<VulkanError> as DrawError);
+union!(#[use_debug] Validated<AllocateImageError>, #[use_debug] Validated<VulkanError> as GetFramebuffersError);
+union!(#[use_debug] Validated<VulkanError>, GetPipelineError, GetCommandBuffersError, GetFramebuffersError as UpdatePipelinesError);
+union!(InvalidEntryPoint, #[use_debug] Validated<VulkanError>, #[use_debug] Box<ValidationError>, IntoPipelineLayoutCreateInfoError as GetPipelineError);
+union!(#[use_debug] Validated<VulkanError>, #[use_debug] Box<ValidationError> as GetCommandBuffersError);
+union!(CommandBufferExecError, #[use_debug] Validated<VulkanError> as DrawError);
 union!(InvalidPipelineHandle, HostAccessError as SetIndirectBufferError);
 union!(InvalidBinding, InvalidPipelineHandle as GetBindingError);
-union!(Validated<AllocateBufferError>, Box<ValidationError>, Validated<VulkanError>, CommandBufferExecError as BufferImageError);
+union!(#[use_debug] Validated<AllocateBufferError>, #[use_debug] Box<ValidationError>, #[use_debug] Validated<VulkanError>, CommandBufferExecError as BufferImageError);

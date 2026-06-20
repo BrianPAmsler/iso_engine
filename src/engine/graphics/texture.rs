@@ -49,7 +49,7 @@ impl Texture {
 pub mod builder {
     use image::RgbaImage;
     use itertools::Itertools;
-    use vulkano::{format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::ImageView}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
+    use vulkano::{format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::{ImageView, ImageViewCreateInfo}}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
 
     use crate::{engine::graphics::{Graphics, texture::{Texture, error::{InvalidFrameDimensions, TextureBuilderError}}}, error::Result};
 
@@ -63,7 +63,7 @@ pub mod builder {
         wrap_t: SamplerAddressMode,
         min_filter: Filter,
         mag_filter: Filter,
-        image_type: ImageType
+        image_type: ImageType,
     }
 
     impl TextureBuilder {
@@ -128,7 +128,7 @@ pub mod builder {
                 wrap_t: SamplerAddressMode::Repeat,
                 min_filter: Filter::Linear,
                 mag_filter: Filter::Linear,
-                image_type: ImageType::Dim3d
+                image_type: ImageType::Dim2d
             })
         }
 
@@ -155,12 +155,20 @@ pub mod builder {
         pub fn finish(self, gfx: &Graphics) -> Result<Texture, TextureBuilderError> {
             let Self { data, width, height, depth, format, wrap_s, wrap_t, min_filter, mag_filter, image_type } = self;
 
+            let array_layers = depth;
+            let depth_dim = if image_type == ImageType::Dim3d {
+                depth
+            } else {
+                1
+            };
+
             let image = Image::new(
                 gfx.memory_allocator(),
                 ImageCreateInfo {
                     image_type,
                     format,
-                    extent: [width, height, depth],
+                    extent: [width, height, depth_dim],
+                    array_layers,
                     usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
                     ..Default::default()
                 },
@@ -201,5 +209,5 @@ pub mod error {
     #[error("All frames must have the same dimensions.")]
     pub struct InvalidFrameDimensions;
 
-    union!(Validated<AllocateImageError>, Validated<AllocateBufferError>, Box<ValidationError>, CommandBufferExecError, BufferImageError, Validated<VulkanError> as TextureBuilderError);
+    union!(#[use_debug] Validated<AllocateImageError>, #[use_debug] Validated<AllocateBufferError>, #[use_debug] Box<ValidationError>, CommandBufferExecError, BufferImageError, #[use_debug] Validated<VulkanError> as TextureBuilderError);
 }

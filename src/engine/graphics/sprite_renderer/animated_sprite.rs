@@ -53,12 +53,12 @@ pub struct AnimatedSpriteData {
     pub position: Vec3,
     pub anchor: Vec2,
     pub dimensions: Vec2,
-    pub depth: f32
+    pub frame: u32
 }
 
 impl From<AnimatedSpriteData> for vertex_shader::Sprite {
     fn from(value: AnimatedSpriteData) -> Self {
-        Self { position: value.position.as_array().into(), dimensions: vec4!(value.anchor, value.dimensions).as_array(), depth: value.depth }
+        Self { position: value.position.as_array().into(), dimensions: vec4!(value.anchor, value.dimensions).as_array(), frame: value.frame }
     }
 }
 

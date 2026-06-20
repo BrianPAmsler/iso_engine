@@ -15,7 +15,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro]
-pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
     quote! {
         #[derive(Debug)]
         pub struct DynamicMessageErorr(String);
@@ -72,7 +72,7 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
         impl<E: ::std::error::Error> ::std::fmt::Display for Error<E> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 self.backtrace.borrow_mut().resolve();
-                write!(f, "Error: {}\n\nStack Backtrace\n{:?}", self.source, self.backtrace)
+                write!(f, "Error: {}\n\nStack Backtrace\n{:?}", self.source, self.backtrace.borrow())
             }
         }
 
@@ -110,7 +110,7 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
             impl ::std::fmt::Display for Error {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                     self.backtrace.borrow_mut().resolve();
-                    write!(f, "Error: {}\n\nStack Backtrace\n{:?}", self.source, self.backtrace)
+                    write!(f, "Error: {}\n\nStack Backtrace\n{:?}", self.source, self.backtrace.borrow())
                 }
             }
 

@@ -1,7 +1,7 @@
 use itertools::Itertools as _;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, format_ident, quote};
-use syn::{GenericArgument, Ident, Lifetime, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned};
+use syn::{Attribute, GenericArgument, Ident, Lifetime, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned};
 
 macro_rules! auto_generate_error {
     ($type_: expr) => {{
@@ -123,12 +123,16 @@ fn resolve_variant_name(type_: &Type) -> Result<Ident, syn::Error> {
 }
 
 struct NamedType {
+    use_debug: Option<Attribute>,
     type_: Type,
     variant_name: Ident
 }
 
 impl Parse for NamedType {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let attr =  Attribute::parse_outer(input)?.into_iter()
+            .find(|attr| attr.meta.path().is_ident("use_debug"));
+
         let type_ = input.parse()?;
 
         let colon: Option<Token![:]> = input.parse()?;
@@ -140,6 +144,7 @@ impl Parse for NamedType {
         };
         
         Ok(Self {
+            use_debug: attr,
             type_,
             variant_name
         })
@@ -201,7 +206,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     
     let variants = input.types.iter()
         .map(|type_| {
-            let NamedType { type_, variant_name } = type_;
+            let NamedType { type_, variant_name, .. } = type_;
             quote! {
                 #variant_name(#type_)
             }
@@ -210,20 +215,29 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     
     let match_variants = input.types.iter()
         .map(|type_| {
-            let NamedType { variant_name, .. } = type_;
+            let NamedType { variant_name, use_debug, .. } = type_;
+            let fmt_type = if use_debug.is_some() {
+                quote! { ::std::fmt::Debug }
+            } else {
+                quote! { ::std::fmt::Display }
+            };
             quote! {
-                #name::#variant_name(value) => ::core::write!(f, "{value}")
+                #name::#variant_name(value) => #fmt_type::fmt(value, f)
             }
         })
         .collect_vec();
 
     let display = if input.types.len() == 1 {
+        let fmt_type = if input.types[0].use_debug.is_some() {
+            quote! { ::std::fmt::Debug }
+        } else {
+            quote! { ::std::fmt::Display }
+        };
         quote! {
             #[automatically_derived]
             impl ::std::fmt::Display for #name {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    let value = &self.0;
-                    ::core::write!(f, "{value}")
+                    #fmt_type::fmt(&self.0, f)
                 }
             }
         }
@@ -242,7 +256,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let from_variants = input.types.iter()
         .map(|type_| {
-            let NamedType { type_, variant_name } = type_;
+            let NamedType { type_, variant_name, .. } = type_;
 
             let new = if input.types.len() == 1 {
                 quote! { #name }

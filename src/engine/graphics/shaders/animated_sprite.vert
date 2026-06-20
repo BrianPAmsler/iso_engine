@@ -6,10 +6,8 @@ layout(location = 1) in vec2 uv;
 struct Sprite {
     vec3 position;
     vec4 dimensions;
-    float depth;
+    uint frame;
 };
-
-layout(set = 0, binding = 0) uniform sampler3D frames;
 
 layout(set = 0, binding = 1) uniform InputData {
     mat4 view;
@@ -22,7 +20,6 @@ layout(set = 0, std430, binding = 2) buffer spriteSSBO {
 };
 
 layout(location = 0) out vec3 texCoords;
-layout(location = 1) flat out float depth;
 
 void main()
 {
@@ -67,5 +64,5 @@ void main()
     gl_Position = final_matrix * vec4(offsetPos, 1);
     gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
 
-    texCoords = vec3(uv, sprite.depth);
+    texCoords = vec3(uv, sprite.frame);
 }

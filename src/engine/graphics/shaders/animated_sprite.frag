@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec3 texCoords;
 
-layout(binding = 0) uniform sampler3D frames;
+layout(binding = 0) uniform sampler2DArray frames;
 
 layout(location = 0) out vec4 outColor;
 
