@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use image::{ImageBuffer, Luma};
 use vulkano::{format::Format, image::sampler::Filter, pipeline::graphics::vertex_input::Vertex};
 
-use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, texture::{Texture, builder::TextureBuilder}, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}}}, error::{ExplicitUnwrap, OutOfBounds, Result, Uninitialized, any::IntoAny}};
+use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, texture::{Texture, builder::TextureBuilder}, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}}}, error::{ExplicitUnwrap, OutOfBounds, Result, Uninitialized}};
 
 const VERTEX_DATA: &[TerrainVertex] = &[
     // [0]: Bottom-Left Corner
@@ -259,12 +259,12 @@ impl Terrain {
 
 impl Component for Terrain {
     fn init(&mut self, engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
-        let TerrainInner::Uninitialized { height_file, color_file  } = std::mem::take(&mut self.0) else { return Err(Uninitialized).into_any() };
+        let TerrainInner::Uninitialized { height_file, color_file  } = std::mem::take(&mut self.0) else { Err(Uninitialized)? };
 
-        let grid = image::ImageReader::open(color_file).into_any()?.decode().into_any()?;
+        let grid = image::ImageReader::open(color_file)?.decode()?;
         let grid = grid.to_rgba8();
 
-        let height_map = image::ImageReader::open(height_file).into_any()?.decode().into_any()?;
+        let height_map = image::ImageReader::open(height_file)?.decode()?;
         let height_map = height_map.to_rgb8();
         let (width, height) = height_map.dimensions();
         let height_map: Vec<u8> = height_map.into_raw().into_iter().step_by(3).collect();
@@ -280,13 +280,13 @@ impl Component for Terrain {
     fn update(&mut self, engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID, _delta_time: f32) -> crate::error::any::Result<()> {
         self.update_textures(&engine.gfx)?;
 
-        let TerrainInner::Initialized { width, height, pipeline, .. } = &self.0 else { return Err(Uninitialized).into_any() };
+        let TerrainInner::Initialized { width, height, pipeline, .. } = &self.0 else { Err(Uninitialized)? };
         engine.terrain_renderer.queue_terrain(*width, *height, *pipeline);
         Ok(())
     }
 
     fn on_remove(&mut self, _engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
-        Err("Unimplemented")?
+        unimplemented!("Terrain on_remove unimplemented.");
     }
 
     fn priority(&self) -> &'static i32 { &0 }

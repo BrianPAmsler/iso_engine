@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc, time::{Duration, Instant}};
 
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{self, EventLoop}, monitor::MonitorHandle, platform::pump_events::EventLoopExtPumpEvents, window::{Fullscreen, Window, WindowAttributes}};
 
-use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, graphics::{Graphics, sprite_renderer::SpriteRenderer, terrain::terrain_renderer::TerrainRenderer}, input::{self, Input, Key}}, error::{ExplicitUnwrap, Result, any::{Error, IntoAny}}};
+use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, graphics::{Graphics, sprite_renderer::SpriteRenderer, terrain::terrain_renderer::TerrainRenderer}, input::{self, Input, Key}}, error::{ExplicitUnwrap, MessageErorr, Result, any::Error}};
 
 #[derive(Debug)]
 pub enum WindowMode {
@@ -171,10 +171,10 @@ impl Engine {
     }
 
     pub fn run(&mut self) -> crate::error::any::Result<()> {
-        let event_loop = self._event_loop.take().ok_or("No event loop")?;
+        let event_loop = self._event_loop.take().ok_or(MessageErorr("No event loop"))?;
 
         self.window.request_redraw();
-        event_loop.run_app(self).into_any()?;
+        event_loop.run_app(self)?;
 
         Ok(())
     }

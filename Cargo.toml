@@ -30,6 +30,7 @@ winit = "0.30.13"
 vulkano-shaders = "0.35.0"
 bytemuck = "1.25.0"
 error = { version = "0.1.0", path = "error" }
+resource-packager = { git = "https://github.com/BrianPAmsler/resource_packager.git", version = "0.1.0" }
 
 # [profile.release]
 # debug=true

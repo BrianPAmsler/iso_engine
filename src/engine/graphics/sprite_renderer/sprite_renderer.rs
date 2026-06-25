@@ -375,7 +375,7 @@ mod tests {
         }
     }
 
-    use crate::{engine::graphics::{Binding, BufferType, Graphics, PipelineBuilder, sprite_renderer::sprite_renderer::{AlignedVec3, GLSpriteStruct, INDEX_DATA, InputData, SPRITE_MAP_BINDING, SPRITE_SHEET_BINDING, SpriteSSBO, SpriteSheetSSBO, UNIFORMS_BINDING, VERTEX_DATA, Vec4Aligned}}};
+    use crate::{engine::graphics::{Binding, BufferType, Graphics, PipelineBuilder, sprite_renderer::sprite_renderer::{AlignedVec3, GLSpriteStruct, INDEX_DATA, InputData, SPRITE_MAP_BINDING, SPRITE_SHEET_BINDING, SpriteSSBO, SpriteSheetSSBO, UNIFORMS_BINDING, VERTEX_DATA, Vec4Aligned}}, error::{MessageErorr, any::Result}};
     
     
     
@@ -383,7 +383,7 @@ mod tests {
     use winit::platform::windows::EventLoopBuilderExtWindows;
 
     #[test]
-    pub fn sprite_struct_test() -> Result<(), Box<dyn std::error::Error>> {
+    pub fn sprite_struct_test() -> Result<()> {
         let _lock = crate::engine::graphics::test_lock::LOCK.lock().unwrap();
 
         let mut event_loop = EventLoop::builder()
@@ -420,7 +420,7 @@ mod tests {
         
         event_loop.pump_app_events(Some(Duration::ZERO), &mut app);
 
-        let WindowStatus::Initialized(window) = app.0 else { Err("d")? };
+        let WindowStatus::Initialized(window) = app.0 else { Err(MessageErorr("d"))? };
         let window = Arc::new(window);
 
         let mut gfx = Graphics::new(window, &event_loop).unwrap();

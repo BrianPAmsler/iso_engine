@@ -1,4 +1,6 @@
+use proc_macro2::TokenStream;
 use quote::quote;
+use syn::{parse::Nothing, parse_macro_input};
 
 mod derive;
 mod union;
@@ -14,10 +16,28 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro]
-pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    parse_macro_input!(tokens as Nothing);
+
+    let conversion = if std::env::var("CARGO_PKG_NAME") != Ok("opengl_engine".into()) {
+        quote! {
+            impl<E: ::std::error::Error> From<::opengl_engine::error::Error<E>> for Error<E> {
+                fn from(value: ::opengl_engine::error::Error<E>) -> Error<E> {
+                    Error::from_raw(value.source, value.backtrace)
+                }
+            }
+            impl<E: ::std::error::Error> From<Error<E>> for ::opengl_engine::error::Error<E> {
+                fn from(value: Error<E>) -> ::opengl_engine::error::Error<E> {
+                    ::opengl_engine::error::Error::from_raw(value.source, value.backtrace)
+                }
+            }
+        }
+    } else {
+        TokenStream::new()
+    };
     quote! {
         #[derive(Debug)]
-        pub struct DynamicMessageErorr(String);
+        pub struct DynamicMessageErorr(pub String);
 
         impl ::std::fmt::Display for DynamicMessageErorr {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -28,7 +48,7 @@ pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
         impl ::std::error::Error for DynamicMessageErorr {}
 
         #[derive(Debug)]
-        pub struct MessageErorr(&'static str);
+        pub struct MessageErorr(pub &'static str);
 
         impl ::std::fmt::Display for MessageErorr {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,6 +79,12 @@ pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 Error { source, backtrace }
             }
 
+            pub fn from_raw(source: E, backtrace: ::opengl_engine::error::backtrace::Backtrace) -> Error<E>
+            {
+                let backtrace = ::std::cell::RefCell::new(backtrace);
+                Error { source, backtrace }
+            }
+
             pub fn source(&self) -> &E {
                 &self.source
             }
@@ -80,8 +106,6 @@ pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 Error::new(value)
             }
         }
-
-        impl<E: ::std::error::Error> ::std::error::Error for Error<E> {}
 
         pub type Result<T, E> = std::result::Result<T, Error<E>>;
 
@@ -113,8 +137,6 @@ pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 }
             }
 
-            impl ::std::error::Error for Error {}
-
             pub type Result<T> = std::result::Result<T, Error>;
 
             impl<E: ::std::error::Error + 'static> From<super::Error<E>> for Error {
@@ -123,25 +145,9 @@ pub fn create_error(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 }
             }
 
-            pub trait IntoAny<T> {
-                fn into_any(self) -> Result<T>;
-            }
-
-            impl<T, E: ::std::error::Error + 'static> IntoAny<T> for ::std::result::Result<T, E> {
-                fn into_any(self) -> Result<T> {
-                    self.map_err(Error::new)
-                }
-            }
-
-            impl From<String> for Error {
-                fn from(value: String) -> Self {
-                    Error::new(super::DynamicMessageErorr(value))
-                }
-            }
-
-            impl From<&'static str> for Error {
-                fn from(value: &'static str) -> Self {
-                    Error::new(super::MessageErorr(value))
+            impl<E: ::std::error::Error + 'static> From<E> for Error {
+                fn from(value: E) -> Self {
+                    Error::new(value)
                 }
             }
         }

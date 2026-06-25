@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}}, error::{ExplicitUnwrap, Result, TryUnwrap as _, Uninitialized, any::IntoAny}};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}}, error::{DynamicMessageErorr, ExplicitUnwrap, Result, TryUnwrap as _, Uninitialized}};
 use gl_types::vectors::Vec2;
 
 use gl_types::{vec2};
@@ -43,8 +43,8 @@ impl SpriteSheet {
 
 impl Component for SpriteSheet {
     fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        let path = Path::new(self.filename.as_ref().ok_or(Uninitialized).into_any()?);
-        let sprite_sheet = image::open(path).into_any()?;
+        let path = Path::new(self.filename.as_ref().ok_or(Uninitialized)?);
+        let sprite_sheet = image::open(path)?;
         let sprite_map = std::mem::take(&mut self.sprite_definitions);
         let name = path.file_name().and_then(|path| path.to_str());
 
@@ -58,7 +58,7 @@ impl Component for SpriteSheet {
     fn fixed_update(&mut self, _engine: &mut Engine, _owner: ObjectID, _delta_time: f32) -> crate::error::any::Result<()> { Ok(()) }
 
     fn on_remove(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        engine.sprite_renderer.remove_sprite_sheet(&mut engine.gfx, self.id.ok_or(Uninitialized).into_any()?);
+        engine.sprite_renderer.remove_sprite_sheet(&mut engine.gfx, self.id.ok_or(Uninitialized)?);
 
         Ok(())
     }
@@ -93,7 +93,7 @@ impl Component for Sprite {
     fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
         self.sprite_sheet_id = SpriteSheetEnum::ID(match &self.sprite_sheet_id {
             SpriteSheetEnum::ID(_) => panic!("no"),
-            SpriteSheetEnum::Name(name) => engine.sprite_renderer.get_sprite_sheet_by_name(name).ok_or(format!("Sprite sheet \"{}\" not found.", name))?,
+            SpriteSheetEnum::Name(name) => engine.sprite_renderer.get_sprite_sheet_by_name(name).ok_or(DynamicMessageErorr(format!("Sprite sheet \"{}\" not found.", name)))?,
         });
 
         Ok(())
@@ -141,7 +141,7 @@ impl Component for AnimatedSprite {
     fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
         self.animated_sprite_id = AnimatedSpriteEnum::ID(match &self.animated_sprite_id {
             AnimatedSpriteEnum::ID(_) => panic!("no"),
-            AnimatedSpriteEnum::Name(name) => engine.sprite_renderer.get_animated_sprite_by_name(name).ok_or(format!("Animated sprite \"{}\" not found.", name))?,
+            AnimatedSpriteEnum::Name(name) => engine.sprite_renderer.get_animated_sprite_by_name(name).ok_or(DynamicMessageErorr(format!("Animated sprite \"{}\" not found.", name)))?,
         });
 
         let AnimatedSpriteEnum::ID(id) = self.animated_sprite_id else { unreachable!() };
@@ -214,7 +214,7 @@ impl Component for AnimatedSpriteLoader {
     fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
         let AnimatedSpriteLoaderEnum::Uninitialized { name, frames_dir } = self.inner.take() else { unreachable!("init called twice") };
 
-        let frames = std::fs::read_dir(frames_dir).into_any()?
+        let frames = std::fs::read_dir(frames_dir)?
             .filter_map(|result| result.ok())
             .map(|entry| entry.path())
             .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
@@ -222,7 +222,7 @@ impl Component for AnimatedSpriteLoader {
                 Ok::<_, ImageError>(image::open(path)?.into_rgba8())
             })
             .try_collect()
-            .into_any()?;
+            ?;
 
         self.inner = AnimatedSpriteLoaderEnum::Initialized(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, name, frames)?);
 

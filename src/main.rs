@@ -2,7 +2,6 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-
 use gl_types::{geometric::normalize, vec2, vec3};
 use regex::Regex;
 
