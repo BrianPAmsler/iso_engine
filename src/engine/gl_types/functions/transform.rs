@@ -1,10 +1,8 @@
-#![allow(non_snake_case)]
-
-use crate::{matrices::Mat4, vectors::Vec3};
+use crate::engine::gl_types::{matrices::Mat4, vectors::Vec3};
 
 use super::geometric::{cross, dot, normalize};
 
-pub fn lookAt(eye: Vec3, center: Vec3, up: Vec3) -> Mat4 {
+pub fn look_at(eye: Vec3, center: Vec3, up: Vec3) -> Mat4 {
     let z_axis = normalize(center - eye);
     let x_axis = normalize(cross(up, z_axis));
     let y_axis = cross(z_axis, x_axis);

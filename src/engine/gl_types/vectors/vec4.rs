@@ -1,15 +1,16 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign}};
 
+use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::Vector4;
 
-use crate::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
+use crate::engine::gl_types::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
 
 use super::{Vec2, Vec3};
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
-pub struct Vec4(pub(in crate) Vector4<f32>);
+#[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
+pub struct Vec4(pub(in crate::engine::gl_types) Vector4<f32>);
 
 impl Debug for Vec4 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -21,7 +22,7 @@ impl Vec4 {
     pub const ZERO: Vec4 = Vec4::_new(0.0, 0.0, 0.0, 0.0);
     pub const ONE: Vec4 = Vec4::_new(1.0, 1.0, 1.0, 1.0);
 
-    pub(in crate) const fn _new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub(in crate::engine::gl_types) const fn _new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self(Vector4::new(x, y, z, w))
     }
 }
@@ -105,35 +106,37 @@ impl Vec4Constructor<Vec3> for Vec4 {
 macro_rules! vec4 {
     ($a:expr, $b:expr, $c:expr, $d:expr) => {
         {
-            use $crate::vectors::Vec4Constructor;
-            $crate::vectors::Vec4::new(($a, $b, $c, $d))
+            use $crate::engine::gl_types::vectors::Vec4Constructor;
+            $crate::engine::gl_types::vectors::Vec4::new(($a, $b, $c, $d))
         }
     };
     ($a:expr, $b:expr, $c:expr) => {
         {
-            use $crate::vectors::Vec4Constructor;
-            $crate::vectors::Vec4::new(($a, $b, $c))
+            use $crate::engine::gl_types::vectors::Vec4Constructor;
+            $crate::engine::gl_types::vectors::Vec4::new(($a, $b, $c))
         }
     };
     ($a:expr, $b:expr) => {
         {
-            use $crate::vectors::Vec4Constructor;
-            $crate::vectors::Vec4::new(($a, $b))
+            use $crate::engine::gl_types::vectors::Vec4Constructor;
+            $crate::engine::gl_types::vectors::Vec4::new(($a, $b))
         }
     };
     ($a:expr) => {
         {
-            use $crate::vectors::Vec4Constructor;
-            $crate::vectors::Vec4::new($a)
+            use $crate::engine::gl_types::vectors::Vec4Constructor;
+            $crate::engine::gl_types::vectors::Vec4::new($a)
         }
     };
     () => {
         {
-            use $crate::vectors::Vec4Constructor;
-            $crate::vectors::Vec4::new(0)
+            use $crate::engine::gl_types::vectors::Vec4Constructor;
+            $crate::engine::gl_types::vectors::Vec4::new(0)
         }
     };
 }
+
+pub use vec4;
 
 impl InnerMatrix<4, 1> for Vec4 {
     fn get_inner_matrix(&self) -> &nalgebra::Matrix<f32, nalgebra::Const<4>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 4, 1>> {

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use std::{ops::{Deref, DerefMut}, sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard}};
 
 pub struct ReadGuard<'a, T>(RwLockReadGuard<'a, Vec<T>>);

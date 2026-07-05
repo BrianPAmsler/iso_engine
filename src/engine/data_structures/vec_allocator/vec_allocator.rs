@@ -2,8 +2,6 @@ use std::{collections::VecDeque, fmt::Debug};
 
 use rand::RngExt as _;
 
-use crate::error::ExplicitUnwrap;
-
 use super::error::Result;
 
 #[derive(Debug, Clone)]
@@ -317,7 +315,7 @@ impl<T> Iterator for IntoIter<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.vec.is_empty() {
-            match self.vec.pop_front().explicit_unwrap() {
+            match self.vec.pop_front().unwrap() {
                 Slot::Element { value, .. } => {
                     return Some(value);
                 },
@@ -345,8 +343,6 @@ impl<T> IntoIterator for VecAllocator<T> {
 mod tests {
 
     use rand::RngExt;
-
-    use crate::error::ExplicitUnwrap;
 
     use super::{Slot, VecAllocator};
 
@@ -505,7 +501,7 @@ mod tests {
 
                 println!("Removing at index {}...", entry.index);
                 remove(&mut test_vec, entry.index);
-                allocator.remove(entry).explicit_unwrap();
+                allocator.remove(entry).unwrap();
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
@@ -533,7 +529,7 @@ mod tests {
 
                 println!("Removing at index {}...", entry.index);
                 remove(&mut test_vec, entry.index);
-                allocator.remove(entry).explicit_unwrap();
+                allocator.remove(entry).unwrap();
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;
@@ -561,7 +557,7 @@ mod tests {
 
                 println!("Removing at index: {}...", entry.index);
                 remove(&mut test_vec, entry.index);
-                allocator.remove(entry).explicit_unwrap();
+                allocator.remove(entry).unwrap();
 
                 let expected = VecAllocator::from_raw(&test_vec);
                 compare_vecs(&expected, &allocator)?;

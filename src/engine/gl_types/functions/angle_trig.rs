@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use crate::ElementWise;
+use crate::engine::gl_types::ElementWise;
 
 pub fn radians<const R: usize, const C:  usize, T: ElementWise<R, C>>(degrees: T) -> T {
     const RATIO: f32 = PI / 180.0;

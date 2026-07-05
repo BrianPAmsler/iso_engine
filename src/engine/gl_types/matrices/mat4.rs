@@ -1,13 +1,14 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign}};
 
+use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix4, Vector4};
 
-use crate::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec4, GLScalar, Make};
+use crate::engine::gl_types::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec4, GLScalar, Make};
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
-pub struct Mat4(pub(in crate) Matrix4<f32>);
+#[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
+pub struct Mat4(pub(in crate::engine::gl_types) Matrix4<f32>);
 
 impl Debug for Mat4 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -19,7 +20,7 @@ impl Mat4 {
     pub const ZERO: Mat4 = Mat4::_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     pub const IDENTITY: Mat4 = Mat4::_new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
 
-    pub(in crate) const fn _new(m11: f32, m12: f32, m13: f32, m14: f32, m21: f32, m22: f32, m23: f32, m24: f32, m31: f32, m32: f32, m33: f32, m34: f32, m41: f32, m42: f32, m43: f32, m44: f32) -> Self {
+    pub(in crate::engine::gl_types) const fn _new(m11: f32, m12: f32, m13: f32, m14: f32, m21: f32, m22: f32, m23: f32, m24: f32, m31: f32, m32: f32, m33: f32, m34: f32, m41: f32, m42: f32, m43: f32, m44: f32) -> Self {
         Self(Matrix4::new(m11, m12, m13, m14, m21, m22, m23, m24, m31, m32, m33, m34, m41, m42, m43, m44))
     }
 }
@@ -90,29 +91,31 @@ impl Mat4Constructor<super::Mat3> for Mat4 {
 macro_rules! mat4 {
     ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $i:expr, $j:expr, $k:expr, $l:expr, $m:expr, $n:expr, $o:expr, $p:expr) => {
         {
-            use $crate::matrices::Mat4Constructor;
-            $crate::matrices::Mat4::new(($a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p))
+            use $crate::engine::gl_types::matrices::Mat4Constructor;
+            $crate::engine::gl_types::matrices::Mat4::new(($a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p))
         }
     };
     ($a:expr, $b:expr, $c:expr, $d:expr) => {
         {
-            use $crate::matrices::Mat4Constructor;
-            $crate::matrices::Mat4::new(($a, $b, $c, $d))
+            use $crate::engine::gl_types::matrices::Mat4Constructor;
+            $crate::engine::gl_types::matrices::Mat4::new(($a, $b, $c, $d))
         }
     };
     ($a:expr) => {
         {
-            use $crate::matrices::Mat4Constructor;
-            $crate::matrices::Mat4::new($a)
+            use $crate::engine::gl_types::matrices::Mat4Constructor;
+            $crate::engine::gl_types::matrices::Mat4::new($a)
         }
     };
     () => {
         {
-            use $crate::matrices::Mat4Constructor;
-            $crate::matrices::Mat4::new(0)
+            use $crate::engine::gl_types::matrices::Mat4Constructor;
+            $crate::engine::gl_types::matrices::Mat4::new(0)
         }
     };
 }
+
+pub use mat4;
 
 impl InnerMatrix<4, 4> for Mat4 {
     fn get_inner_matrix(&self) -> &nalgebra::Matrix<f32, nalgebra::Const<4>, nalgebra::Const<4>, nalgebra::ArrayStorage<f32, 4, 4>> {

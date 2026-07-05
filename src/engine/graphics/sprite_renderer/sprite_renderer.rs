@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
-use crate::{engine::graphics::sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}, error::Result};
-use gl_types::{matrices::{Mat4, MatN}, vec2, vec4, vectors::{Vec2, Vec3, VecN}};
+use derive_serialize::Serialize;
+use crate::{engine::{gl_types::vectors::{vec2, vec4}, graphics::sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}}, error::Result};
+use crate::engine::gl_types::{matrices::{Mat4, MatN}, vectors::{Vec2, Vec3, VecN}};
 use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
 use vulkano::{buffer::{BufferContents, Subbuffer}, padded::Padded};
@@ -115,6 +116,7 @@ struct SpriteVertex {
     uv: [f32; 2]
 }
 
+#[derive(Serialize)]
 pub struct SpriteDefinition {
     pub x: u32,
     pub y: u32,
@@ -170,12 +172,11 @@ impl SpriteRenderer {
         SpriteRenderer { sprite_sheets: VecAllocator::new(), animated_sprites: VecAllocator::new(), sprite_sheet_index: HashMap::new(), animated_sprite_index: HashMap::new() }
     }
 
-    pub fn add_sprite_sheet(&mut self, name: &str, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: DynamicImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
+    pub fn add_sprite_sheet(&mut self, name: &str, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: RgbaImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
         if self.sprite_sheet_index.contains_key(name) {
             Err(UnknownSpriteSheet { sheet: name.to_owned() })?; 
         }
 
-        let sprite_sheet = sprite_sheet.into_rgba8();
         let (sheet_width, sheet_height) = sprite_sheet.dimensions();
         
         let sprite_sheet = TextureBuilder::from_image(sprite_sheet)
@@ -279,7 +280,7 @@ impl SpriteRenderer {
         sheet.render_queue.push(sprite_data);
     }
 
-    pub fn queue_animated_sprite_instance(&mut self, sprite: AnimatedSpriteID, sprite_data: AnimatedSpriteData) {
+    pub(in crate::engine::graphics) fn queue_animated_sprite_instance(&mut self, sprite: AnimatedSpriteID, sprite_data: AnimatedSpriteData) {
         let Ok(sprite) = self.animated_sprites.get_mut(sprite.0) else { return };
         
         sprite.render_queue.push(Padded(sprite_data.into()));
@@ -340,7 +341,7 @@ impl Default for SpriteRenderer {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, reason="test")]
 mod tests {
     use std::{sync::Arc, time::Duration};
 

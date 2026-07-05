@@ -199,7 +199,6 @@ pub mod builder {
     }
 }
 
-#[allow(clippy::enum_variant_names)]
 pub mod error {
     use error::{Error, union};
     use crate::{engine::graphics::error::BufferImageError, error as errors_module};
@@ -209,5 +208,6 @@ pub mod error {
     #[error("All frames must have the same dimensions.")]
     pub struct InvalidFrameDimensions;
 
+    // #[allow(clippy::enum_variant_names, reason="Variant are generated from vulkan error names and should not be changed.")]
     union!(#[use_debug] Validated<AllocateImageError>, #[use_debug] Validated<AllocateBufferError>, #[use_debug] Box<ValidationError>, CommandBufferExecError, BufferImageError, #[use_debug] Validated<VulkanError> as TextureBuilderError);
 }

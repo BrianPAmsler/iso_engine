@@ -1,4 +1,4 @@
-use crate::inner_matrix::InnerMatrix;
+use crate::engine::gl_types::gl_types::inner_matrix::InnerMatrix;
 
 pub trait ElementWise<const A: usize, const B: usize>: Copy + Clone {
     fn operate<F: FnMut(&mut f32)>(self, f: F) -> Self;

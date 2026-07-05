@@ -1,15 +1,8 @@
-mod element_wise;
 
-pub mod vectors;
-pub mod matrices;
-pub mod functions;
-
-pub use functions::*;
-pub use element_wise::*;
 
 use num::cast::AsPrimitive;
 
-pub(in crate) mod private {
+pub(in crate::engine::gl_types) mod private {
     pub trait Seal {}
 
     impl Seal for i32 {}
@@ -20,7 +13,7 @@ pub(in crate) mod private {
     impl Seal for f64 {}
 }
 
-mod inner_matrix {
+pub(in crate::engine::gl_types) mod inner_matrix {
     use nalgebra::{ArrayStorage, Const, Matrix};
 
     pub trait InnerMatrix<const R: usize, const C: usize> {
@@ -30,7 +23,7 @@ mod inner_matrix {
     }
 }
 
-pub trait Make<T>: private::Seal {
+pub(in crate::engine::gl_types) trait Make<T>: private::Seal {
     fn make(inner: T) -> Self;
 }
 
@@ -273,5 +266,5 @@ macro_rules! matrix_arithmetic {
     };
 }
 
-pub(crate) use vector_arithmetic;
-pub(crate) use matrix_arithmetic;
+pub(in crate::engine::gl_types) use vector_arithmetic;
+pub(in crate::engine::gl_types) use matrix_arithmetic;

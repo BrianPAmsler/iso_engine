@@ -1,6 +1,4 @@
-#![allow(non_snake_case)]
-
-use crate::vectors::VecN;
+use crate::engine::gl_types::vectors::VecN;
 
 pub fn length<const N: usize, V: VecN<N>, R: AsRef<V>>(x: R) -> f32 {
     let mut sum = 0.0;
@@ -39,7 +37,7 @@ pub fn normalize<const N: usize, V: VecN<N>, R: AsRef<V>>(x: R) -> V {
     V::make(v.normalize())
 }
 
-pub fn faceForward<const N: usize, V: VecN<N>, R: AsRef<V>>(n: R, i: R) -> V {
+pub fn face_forward<const N: usize, V: VecN<N>, R: AsRef<V>>(n: R, i: R) -> V {
     let n = n.as_ref().get_inner_matrix();
     let i = i.as_ref().get_inner_matrix();
     

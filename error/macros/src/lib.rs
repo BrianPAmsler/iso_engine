@@ -58,7 +58,6 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl ::std::error::Error for MessageErorr {}
 
-        #[derive(Debug)]
         pub struct Error<E: ::std::error::Error> {
             source: E,
             backtrace: ::std::cell::RefCell<::opengl_engine::error::backtrace::Backtrace>
@@ -100,6 +99,16 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 write!(f, "Error: {}\n\nStack Backtrace\n{:?}", self.source, self.backtrace.borrow())
             }
         }
+        
+        impl<E: ::std::error::Error> ::std::fmt::Debug for Error<E> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.backtrace.borrow_mut().resolve();
+                f.debug_struct("Error")
+                    .field("source", &self.source)
+                    .field("backtrace", &self.backtrace)
+                    .finish()
+            }
+        }
 
         impl<E: ::std::error::Error> From<E> for Error<E> {
             fn from(value: E) -> Error<E> {
@@ -110,10 +119,19 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
         pub type Result<T, E> = std::result::Result<T, Error<E>>;
 
         pub mod any {
-            #[derive(Debug)]
             pub struct Error {
                 source: Box<dyn ::std::error::Error>,
                 backtrace: ::std::cell::RefCell<::opengl_engine::error::backtrace::Backtrace>,
+            }
+
+            impl ::std::fmt::Debug for Error {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    self.backtrace.borrow_mut().resolve();
+                    f.debug_struct("Error")
+                        .field("source", &self.source)
+                        .field("backtrace", &self.backtrace)
+                        .finish()
+                }
             }
 
             impl Error {

@@ -1,15 +1,16 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign}};
 
+use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix, Vector3};
 
-use crate::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
+use crate::engine::gl_types::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
 
 use super::{Vec2, Vec4};
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
-pub struct Vec3(pub(in crate) Vector3<f32>);
+#[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
+pub struct Vec3(pub(in crate::engine::gl_types) Vector3<f32>);
 
 impl Debug for Vec3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -21,7 +22,7 @@ impl Vec3 {
     pub const ZERO: Vec3 = Vec3::_new(0.0, 0.0, 0.0);
     pub const ONE: Vec3 = Vec3::_new(1.0, 1.0, 1.0);
 
-    pub(in crate) const fn _new(x: f32, y: f32, z: f32) -> Vec3 {
+    pub(in crate::engine::gl_types) const fn _new(x: f32, y: f32, z: f32) -> Vec3 {
         Self(Vector3::new(x, y, z))
     }
 }
@@ -77,29 +78,31 @@ impl Vec3Constructor<Vec4> for Vec3 {
 macro_rules! vec3 {
     ($a:expr, $b:expr, $c:expr) => {
         {
-            use $crate::vectors::Vec3Constructor;
-            $crate::vectors::Vec3::new(($a, $b, $c))
+            use $crate::engine::gl_types::vectors::Vec3Constructor;
+            $crate::engine::gl_types::vectors::Vec3::new(($a, $b, $c))
         }
     };
     ($a:expr, $b:expr) => {
         {
-            use $crate::vectors::Vec3Constructor;
-            $crate::vectors::Vec3::new(($a, $b))
+            use $crate::engine::gl_types::vectors::Vec3Constructor;
+            $crate::engine::gl_types::vectors::Vec3::new(($a, $b))
         }
     };
     ($a:expr) => {
         {
-            use $crate::vectors::Vec3Constructor;
-            $crate::vectors::Vec3::new($a)
+            use $crate::engine::gl_types::vectors::Vec3Constructor;
+            $crate::engine::gl_types::vectors::Vec3::new($a)
         }
     };
     () => {
         {
-            use $crate::vectors::Vec3Constructor;
-            $crate::vectors::Vec3::new(0)
+            use $crate::engine::gl_types::vectors::Vec3Constructor;
+            $crate::engine::gl_types::vectors::Vec3::new(0)
         }
     };
 }
+
+pub use vec3;
 
 impl InnerMatrix<3, 1> for Vec3 {
     fn get_inner_matrix(&self) -> &Matrix<f32, nalgebra::Const<3>, nalgebra::Const<1>, nalgebra::ArrayStorage<f32, 3, 1>> {

@@ -1,24 +1,27 @@
-use std::path::Path;
+use std::{path::{Path, PathBuf}, sync::Arc};
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}}, error::{DynamicMessageErorr, ExplicitUnwrap, Result, TryUnwrap as _, Uninitialized}};
-use gl_types::vectors::Vec2;
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{DynamicMessageErorr, MessageErorr, Result, TryUnwrap as _, Uninitialized}};
+use derive_serialize::Serialize;
+use crate::engine::gl_types::vectors::Vec2;
 
-use gl_types::{vec2};
-use image::ImageError;
-use itertools::Itertools;
+use image::{ImageError, RgbaImage};
 
 use super::SpriteData;
 
+#[derive(Serialize)]
 pub struct SpriteSheet {
     id: Option<SpriteSheetID>,
-    filename: Option<String>,
+    #[serialized]
+    resource: PathBuf,
+    resource_handle: Option<ResourceHandle<RgbaImage, Arc<ImageError>>>,
+    #[serialized]
     sprite_definitions: Vec<SpriteDefinition>,
     count: usize
 }
 
 impl SpriteSheet {
-    pub fn new(file_name: &str) -> SpriteSheet {
-        SpriteSheet { id: None, filename: Some(file_name.to_owned()), sprite_definitions: Vec::new(), count: 0 }
+    pub fn new<P: Into<PathBuf>>(resource: P) -> SpriteSheet {
+        SpriteSheet { id: None, resource: resource.into(), resource_handle: None, sprite_definitions: Vec::new(), count: 0 }
     }
 
     pub fn add_sprite(&mut self, x: u32, y: u32, width: u32, height: u32) -> u32 {
@@ -42,22 +45,23 @@ impl SpriteSheet {
 }
 
 impl Component for SpriteSheet {
-    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        let path = Path::new(self.filename.as_ref().ok_or(Uninitialized)?);
-        let sprite_sheet = image::open(path)?;
-        let sprite_map = std::mem::take(&mut self.sprite_definitions);
-        let name = path.file_name().and_then(|path| path.to_str());
-
-        // If add_sprite_sheet returns None it should panic, so rewrap the unwrapped result.
-        self.id = Some(engine.sprite_renderer.add_sprite_sheet(name.try_unwrap()?, &mut engine.gfx, 1024, sprite_sheet, &sprite_map)?);
-        self.filename = None;
+    fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
+        self.resource_handle = Some(engine.resource_manager.load(ImageLoader, &self.resource)?);
 
         Ok(())
     }
 
-    fn fixed_update(&mut self, _engine: &mut Engine, _owner: ObjectID, _delta_time: f32) -> crate::error::any::Result<()> { Ok(()) }
+    fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> crate::error::any::Result<()> {
+        let Some(resource) = self.resource_handle.take_if(|resource| resource.can_take()) else { return Ok(()) };
 
-    fn on_remove(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
+        let Some(result) = resource.take().ok().unwrap() else { return Ok(()) };
+        let image = result?;
+        engine.sprite_renderer.add_sprite_sheet(self.resource.to_str().unwrap(), &mut engine.gfx, 1024, image, &self.sprite_definitions)?;
+
+        Ok(())
+    }
+
+    fn on_remove(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
         engine.sprite_renderer.remove_sprite_sheet(&mut engine.gfx, self.id.ok_or(Uninitialized)?);
 
         Ok(())
@@ -68,21 +72,20 @@ impl Component for SpriteSheet {
     }
 }
 
-enum SpriteSheetEnum {
-    ID(SpriteSheetID),
-    Name(String)
-}
-
+#[derive(Serialize)]
 pub struct Sprite {
-    sprite_sheet_id: SpriteSheetEnum,
+    #[serialized]
+    name: String,
     pub anchor: Vec2,
-    sprite_index: u32
+    pub sprite_index: u32,
+    sprite_sheet_id: Option<SpriteSheetID>,
 }
 
 impl Sprite {
     pub fn new(sprite_sheet_name: &str, sprite_index: u32) -> Sprite {
         Sprite {
-            sprite_sheet_id: SpriteSheetEnum::Name(sprite_sheet_name.to_owned()),
+            name: sprite_sheet_name.to_owned(),
+            sprite_sheet_id: None,
             anchor: Vec2::ZERO,
             sprite_index
         }
@@ -90,17 +93,16 @@ impl Sprite {
 }
 
 impl Component for Sprite {
-    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        self.sprite_sheet_id = SpriteSheetEnum::ID(match &self.sprite_sheet_id {
-            SpriteSheetEnum::ID(_) => panic!("no"),
-            SpriteSheetEnum::Name(name) => engine.sprite_renderer.get_sprite_sheet_by_name(name).ok_or(DynamicMessageErorr(format!("Sprite sheet \"{}\" not found.", name)))?,
-        });
-
-        Ok(())
-    }
-
     fn update(&mut self, engine: &mut Engine, owner: ObjectID, _delta_time: f32) -> crate::error::any::Result<()> {
-        let SpriteSheetEnum::ID(sprite_sheet) = self.sprite_sheet_id else { return Ok(()); };
+        if self.sprite_sheet_id.is_none() {
+            self.sprite_sheet_id = match engine.sprite_renderer.get_sprite_sheet_by_name(&self.name) {
+                None => return Ok(()),
+                v => v
+            };
+        }
+
+        let Some(sprite_sheet) = self.sprite_sheet_id else { return Ok(()) };
+
         let transform = engine.world.get_transform(owner)?;
 
         engine.sprite_renderer.queue_sprite_instance(
@@ -116,43 +118,39 @@ impl Component for Sprite {
     }
 }
 
-enum AnimatedSpriteEnum {
-    ID(AnimatedSpriteID),
-    Name(String)
-}
-
+#[derive(Serialize)]
 pub struct AnimatedSprite {
-    animated_sprite_id: AnimatedSpriteEnum,
+    #[serialized]
+    name: String,
     pub anchor: Vec2,
     pub current_frame: f32,
-    framerate: f32,
-    total_frames: u32,
+    pub framerate: f32,
     pub paused: bool,
-    pub interpolate: bool
+    animated_sprite_id: Option<AnimatedSpriteID>,
+    total_frames: u32,
 }
 
 impl AnimatedSprite {
-    pub fn new(name: &str, framerate: f32) -> AnimatedSprite {
-        AnimatedSprite { animated_sprite_id: AnimatedSpriteEnum::Name(name.to_owned()), anchor: vec2!(0), current_frame: 0.0, framerate, total_frames: 0, paused: false, interpolate: false }
+    pub fn new<S: ToOwned<Owned = String>>(name: S, anchor: Vec2, framerate: f32) -> AnimatedSprite {
+        let name = name.to_owned();
+        AnimatedSprite { name, anchor, current_frame: 0.0, framerate, paused: false, animated_sprite_id: None, total_frames: 0  }
     }
 }
 
 impl Component for AnimatedSprite {
-    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        self.animated_sprite_id = AnimatedSpriteEnum::ID(match &self.animated_sprite_id {
-            AnimatedSpriteEnum::ID(_) => panic!("no"),
-            AnimatedSpriteEnum::Name(name) => engine.sprite_renderer.get_animated_sprite_by_name(name).ok_or(DynamicMessageErorr(format!("Animated sprite \"{}\" not found.", name)))?,
-        });
-
-        let AnimatedSpriteEnum::ID(id) = self.animated_sprite_id else { unreachable!() };
-
-        self.total_frames = engine.sprite_renderer.get_total_frames(id).explicit_unwrap();
-
-        Ok(())
-    }
-
     fn update(&mut self, engine: &mut Engine, owner: ObjectID, delta_time: f32) -> crate::error::any::Result<()> {
-        let AnimatedSpriteEnum::ID(sprite) = self.animated_sprite_id else { return Ok(()); };
+        if self.animated_sprite_id.is_none() {
+            let id = match engine.sprite_renderer.get_animated_sprite_by_name(&self.name) {
+                None => return Ok(()),
+                Some(v) => v
+            };
+            self.animated_sprite_id = Some(id);
+            
+            self.total_frames = engine.sprite_renderer.get_total_frames(id).unwrap();
+        }
+
+        let Some(id) = self.animated_sprite_id else { unreachable!() };
+        
         let transform = engine.world.get_transform(owner)?;
 
         if !self.paused {
@@ -162,7 +160,7 @@ impl Component for AnimatedSprite {
 
         let frame = self.current_frame as u32;
         engine.sprite_renderer.queue_animated_sprite_instance(
-            sprite,
+            id,
             AnimatedSpriteData {
                 position: *transform.position(),
                 anchor: self.anchor,
@@ -179,60 +177,46 @@ impl Component for AnimatedSprite {
     }
 }
 
-enum AnimatedSpriteLoaderEnum {
-    Uninitialized {
-        name: String,
-        frames_dir: String
-    },
-    Initialized(AnimatedSpriteID),
-    Null
-}
-
-impl AnimatedSpriteLoaderEnum {
-    pub fn take(&mut self) -> AnimatedSpriteLoaderEnum {
-        let mut out = AnimatedSpriteLoaderEnum::Null;
-
-        std::mem::swap(self, &mut out);
-
-        out
-    }
-}
-
+#[derive(Serialize)]
 pub struct AnimatedSpriteLoader {
-    inner: AnimatedSpriteLoaderEnum
+    #[serialized]
+    name: String,
+    #[serialized]
+    frames_dir: PathBuf,
+    sprite_id: Option<AnimatedSpriteID>
 }
 
 impl AnimatedSpriteLoader {
-    pub fn new<S1: Into<String>, S2: Into<String>>(name: S1, frames_dir: S2) -> AnimatedSpriteLoader {
+    pub fn new<S: Into<String>, P: Into<PathBuf>>(name: S, frames_dir: P) -> AnimatedSpriteLoader {
         let name = name.into();
         let frames_dir = frames_dir.into();
-        AnimatedSpriteLoader { inner: AnimatedSpriteLoaderEnum::Uninitialized { name, frames_dir } }
+        AnimatedSpriteLoader { name, frames_dir, sprite_id: None }
     }
 }
 
 impl Component for AnimatedSpriteLoader {
     fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        let AnimatedSpriteLoaderEnum::Uninitialized { name, frames_dir } = self.inner.take() else { unreachable!("init called twice") };
+        // let AnimatedSpriteLoaderEnum::Uninitialized { name, frames_dir } = self.inner.take() else { unreachable!("init called twice") };
 
-        let frames = std::fs::read_dir(frames_dir)?
-            .filter_map(|result| result.ok())
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
-            .map(|path| {
-                Ok::<_, ImageError>(image::open(path)?.into_rgba8())
-            })
-            .try_collect()
-            ?;
+        // let frames = std::fs::read_dir(frames_dir)?
+        //     .filter_map(|result| result.ok())
+        //     .map(|entry| entry.path())
+        //     .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
+        //     .map(|path| {
+        //         Ok::<_, ImageError>(image::open(path)?.into_rgba8())
+        //     })
+        //     .try_collect()
+        //     ?;
 
-        self.inner = AnimatedSpriteLoaderEnum::Initialized(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, name, frames)?);
+        // self.inner = AnimatedSpriteLoaderEnum::Initialized(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, name, frames)?);
 
         Ok(())
     }
 
     fn on_remove(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        let AnimatedSpriteLoaderEnum::Initialized(id) = self.inner.take() else { unreachable!("uninitialized.") };
+        // let AnimatedSpriteLoaderEnum::Initialized(id) = self.inner.take() else { unreachable!("uninitialized.") };
 
-        engine.sprite_renderer.remove_animated_sprite(&mut engine.gfx, id);
+        // engine.sprite_renderer.remove_animated_sprite(&mut engine.gfx, id);
 
         Ok(())
     }

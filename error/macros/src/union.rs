@@ -1,7 +1,7 @@
 use itertools::Itertools as _;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{ToTokens, format_ident, quote};
-use syn::{Attribute, GenericArgument, Ident, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated};
+use syn::{Attribute, GenericArgument, Generics, Ident, PathArguments, Token, Type, parse::Parse, parse_macro_input, punctuated::Punctuated};
 
 macro_rules! auto_generate_error {
     ($type_: expr) => {{
@@ -151,9 +151,25 @@ impl Parse for NamedType {
     }
 }
 
+struct TypeDefinition {
+    attributes: Vec<Attribute>,
+    ident: Ident,
+    generics: Generics
+}
+
+impl Parse for TypeDefinition {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(TypeDefinition {
+            attributes: Attribute::parse_outer(input)?,
+            ident: input.parse()?,
+            generics: input.parse()?
+        })
+    }
+}
+
 struct ErrorUnion {
     types: Punctuated<NamedType, Token![,]>,
-    custom_ident: Option<Ident>
+    type_definition: Option<TypeDefinition>
 }
 
 impl Parse for ErrorUnion {
@@ -181,11 +197,11 @@ impl Parse for ErrorUnion {
         }
 
         let types = syn::parse2::<Types>(before)?.0;
-        let custom_ident = after.map(syn::parse2).transpose()?;
+        let type_definition = after.map(syn::parse2).transpose()?;
 
         Ok(Self {
             types,
-            custom_ident,
+            type_definition
         })
     }
 }
@@ -193,7 +209,7 @@ impl Parse for ErrorUnion {
 pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(tokens as ErrorUnion);
 
-    let name = input.custom_ident.unwrap_or_else(|| {
+    let name = input.type_definition.unwrap_or_else(|| {
         let union_name = input.types.iter()
             .map(|type_| {
                 type_.variant_name.to_string()
@@ -201,9 +217,12 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
             .chain(std::iter::once("Union".to_owned()))
             .reduce(|a, b| a + &b)
             .unwrap();
-        Ident::new(&union_name, Span::call_site())
+        TypeDefinition { attributes: Vec::new(), ident: Ident::new(&union_name, Span::call_site()), generics: Generics::default() }
     });
     
+    let (impl_generics, type_generics, _) = name.generics.split_for_impl();
+    let TypeDefinition { attributes, ident: name, .. } = name;
+
     let variants = input.types.iter()
         .map(|type_| {
             let NamedType { type_, variant_name, .. } = type_;
@@ -221,6 +240,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
             } else {
                 quote! { ::std::fmt::Display }
             };
+            
             quote! {
                 #name::#variant_name(value) => #fmt_type::fmt(value, f)
             }
@@ -233,9 +253,10 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
         } else {
             quote! { ::std::fmt::Display }
         };
+        
         quote! {
             #[automatically_derived]
-            impl ::std::fmt::Display for #name {
+            impl #impl_generics ::std::fmt::Display for #name #type_generics {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     #fmt_type::fmt(&self.0, f)
                 }
@@ -244,7 +265,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     } else {
         quote! {
             #[automatically_derived]
-            impl ::std::fmt::Display for #name {
+            impl #impl_generics ::std::fmt::Display for #name #type_generics {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     match self {
                         #(#match_variants),*
@@ -266,22 +287,22 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
             quote! {
                 #[automatically_derived]
-                impl From<#type_> for #name {
-                    fn from(value: #type_) -> #name {
+                impl #impl_generics From<#type_> for #name #type_generics {
+                    fn from(value: #type_) -> #name #type_generics {
                         #new (value)
                     }
                 }
                 
                 #[automatically_derived]
-                impl From<#type_> for errors_module::Error<#name> {
-                    fn from(value: #type_) -> errors_module::Error<#name> {
+                impl #impl_generics From<#type_> for errors_module::Error<#name #type_generics> {
+                    fn from(value: #type_) -> errors_module::Error<#name #type_generics> {
                         errors_module::Error::new(#new(value))
                     }
                 }
                 
                 #[automatically_derived]
-                impl From<errors_module::Error<#type_>> for errors_module::Error<#name> {
-                    fn from(value: errors_module::Error<#type_>) -> errors_module::Error<#name> {
+                impl #impl_generics From<errors_module::Error<#type_>> for errors_module::Error<#name #type_generics> {
+                    fn from(value: errors_module::Error<#type_>) -> errors_module::Error<#name #type_generics> {
                         errors_module::Error::from_existing(value)
                     }
                 }
@@ -293,12 +314,14 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
         let NamedType { type_, .. } = &input.types[0];
         quote! {
             #[derive(Debug)]
-            pub struct #name(#type_);
+            #(#attributes)*
+            pub struct #name #impl_generics(#type_);
         }
     } else { 
         quote! {
             #[derive(Debug)]
-            pub enum #name {
+            #(#attributes)*
+            pub enum #name #impl_generics {
                 #(#variants), *
             }
         }
@@ -310,7 +333,7 @@ pub fn union(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #display
         
         #[automatically_derived]
-        impl ::std::error::Error for #name {}
+        impl #impl_generics ::std::error::Error for #name #type_generics {}
 
         #(#from_variants)*
     }.into()

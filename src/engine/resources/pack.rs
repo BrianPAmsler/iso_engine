@@ -2,14 +2,18 @@ use std::{collections::VecDeque, fs::File, path::{Path, PathBuf}, sync::{Arc, Mu
 
 use resource_packager::packager::{ResourcePackagerError, read::ResourcePackageReader};
 
-use crate::error::{ExplicitUnwrap, Result};
+use crate::error::Result;
 
-trait Callback: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync {}
-impl<F: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync> Callback for F {}
+trait OnLoad: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync {}
+impl<F: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync> OnLoad for F {}
+
+trait BeforeLoad: FnOnce() + Send + Sync {}
+impl<F: FnOnce() + Send + Sync> BeforeLoad for F {}
 
 struct LoadCommand {
     path: PathBuf,
-    callback: Box<dyn Callback>
+    before_load: Box<dyn BeforeLoad>,
+    on_load: Box<dyn OnLoad>
 }
 
 pub struct AssetPack {
@@ -42,28 +46,31 @@ impl AssetPack {
                 std::thread::sleep(Duration::from_millis(10));
                 let Ok(mut queue) = pack.load_queue.try_lock() else { continue };
 
-                let Some(command) = queue.pop_front() else { continue };
+                let Some(LoadCommand { path, before_load, on_load }) = queue.pop_front() else { continue };
                 drop(queue);
 
+                before_load();
                 let Ok(mut reader) = pack.reader.try_lock() else { continue };
 
-                let result = reader.read_file(command.path);
+                let result = reader.read_file(path);
                 drop(reader);
 
-                (command.callback)(result);
+                on_load(result);
             }
         });
     }
 
-    pub fn load_resource<P, F>(&self, path: P, callback: F)
+    pub fn load_resource<P, F1, F2>(&self, path: P, before_load: F1, on_load: F2)
     where
         P: Into<PathBuf>,
-        F: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync + 'static
+        F1: FnOnce() + Send + Sync + 'static,
+        F2: FnOnce(std::result::Result<Box<[u8]>, ResourcePackagerError>) + Send + Sync + 'static
     {
         let path = path.into();
-        let callback = Box::new(callback);
-        let mut queue = self.load_queue.lock().explicit_unwrap();
+        let before_load = Box::new(before_load);
+        let on_load = Box::new(on_load);
+        let mut queue = self.load_queue.lock().unwrap();
 
-        queue.push_back(LoadCommand { path, callback });
+        queue.push_back(LoadCommand { path, before_load, on_load });
     }
 }

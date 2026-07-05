@@ -1,4 +1,4 @@
-use gl_types::{clip_space::{ortho_aspect, perspective}, matrices::Mat4, transform::lookAt, vectors::Vec3};
+use crate::engine::gl_types::{clip_space::{ortho_aspect, perspective}, matrices::Mat4, transform::look_at, vectors::Vec3};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Projection {
@@ -27,6 +27,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(projection: Projection, position: Vec3, direction: Vec3, up: Vec3) -> Camera {
+        
         Camera { projection, projection_matrix: None, view_matrix: None, position, direction, up }
     }
 
@@ -66,16 +67,15 @@ impl Camera {
         self.direction = direction;
     }
 
-    #[allow(clippy::unwrap_used)]
     pub fn view_matrix(&mut self) -> Mat4 {
         if self.view_matrix.is_none() {
-            self.view_matrix = Some(lookAt(self.position, self.position + self.direction, self.up));
+            self.view_matrix = Some(look_at(self.position, self.position + self.direction, self.up));
         }
 
+        #[allow(clippy::unwrap_used, reason="if statement ensures view_matrix is always Some")]
         self.view_matrix.unwrap()
     }
 
-    #[allow(clippy::unwrap_used)]
     pub fn projection_matrix(&mut self) -> Mat4 {
         if self.projection_matrix.is_none() {
             self.projection_matrix = match self.projection {
@@ -84,6 +84,7 @@ impl Camera {
             };
         }
 
+        #[allow(clippy::unwrap_used, reason="if statement ensures view_matrix is always Some")]
         self.projection_matrix.unwrap()
     }
 

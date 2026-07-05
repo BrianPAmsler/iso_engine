@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use gl_types::vectors::Vec3;
+use crate::engine::gl_types::vectors::Vec3;
 
 use super::{ComponentID, ObjectID};
 

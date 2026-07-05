@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gl_types::{matrices::{Mat4, MatN}, vectors::{Vec3, VecN}};
+use crate::engine::gl_types::{matrices::{Mat4, MatN}, vectors::{Vec3, VecN}};
 use rand::RngExt as _;
 use vulkano::{buffer::Subbuffer, command_buffer::DrawIndexedIndirectCommand, format::Format, image::sampler::{Filter, SamplerAddressMode}, shader::ShaderModule};
 
@@ -13,7 +13,7 @@ pub(in crate::engine::graphics::terrain) mod vertex_shader {
         root_path_env: "CARGO_MANIFEST_DIR"
     }
     
-    #[allow(clippy::derivable_impls)]
+    #[allow(clippy::derivable_impls, reason="Cannot add a derive attribute to generated code.")]
     impl Default for VertexUniforms {
         fn default() -> Self {
             Self { vp: Default::default(), terrainDimensions: Default::default(), heightScale: Default::default() }

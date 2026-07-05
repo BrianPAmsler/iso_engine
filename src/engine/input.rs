@@ -5,7 +5,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key(pub(in crate::engine) PhysicalKey);
 
-#[allow(non_upper_case_globals)]
+#[allow(non_upper_case_globals, reason="These globals are a wrapper for an enum, so they should be named like enum variants.")]
 impl Key {
     pub const Backquote: Key = Key(PhysicalKey::Code(KeyCode::Backquote));
     pub const Backslash: Key = Key(PhysicalKey::Code(KeyCode::Backslash));

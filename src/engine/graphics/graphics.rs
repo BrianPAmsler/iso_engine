@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter, sync::Arc};
 use itertools::Itertools;
 use vulkano::{Validated, VulkanError, VulkanLibrary, buffer::{Buffer, BufferContents, BufferCreateInfo, Subbuffer}, command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo, DrawIndexedIndirectCommand, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo, allocator::StandardCommandBufferAllocator}, descriptor_set::{DescriptorSet, WriteDescriptorSet, allocator::StandardDescriptorSetAllocator}, device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags, physical::PhysicalDeviceType}, format::{ClearValue, Format}, image::{Image, ImageCreateInfo, ImageType, ImageUsage, view::ImageView}, instance::{Instance, InstanceCreateFlags, InstanceCreateInfo}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}, pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo, graphics::{GraphicsPipelineCreateInfo, color_blend::{ColorBlendAttachmentState, ColorBlendState}, depth_stencil::{DepthState, DepthStencilState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{VertexBufferDescription, VertexDefinition as _}, viewport::{Viewport, ViewportState}}, layout::PipelineDescriptorSetLayoutCreateInfo}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass}, shader::ShaderModule, swapchain::{self, PresentMode, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo}, sync::{self, GpuFuture}};
 use winit::{event_loop::EventLoop, window::Window};
-use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{texture::Texture, error::{BufferImageError, DescriptorSetError, DrawError, GetBindingError, GetCommandBuffersError, GetFramebuffersError, GetPipelineError, GetRenderPassError, InvalidBinding, InvalidEntryPoint, InvalidPipelineHandle, NewGraphicsError, NoLayout, NoPhysicalDevices, SRGBUnsupported, SetIndirectBufferError, UpdatePipelinesError}}}, error::{ExplicitUnwrap, Result}};
+use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{texture::Texture, error::{BufferImageError, DescriptorSetError, DrawError, GetBindingError, GetCommandBuffersError, GetFramebuffersError, GetPipelineError, GetRenderPassError, InvalidBinding, InvalidEntryPoint, InvalidPipelineHandle, NewGraphicsError, NoLayout, NoPhysicalDevices, SRGBUnsupported, SetIndirectBufferError, UpdatePipelinesError}}}, error::Result};
 
 unsafe fn exit<T> (status: i32) -> T {
     std::process::exit(status)
@@ -449,7 +449,7 @@ fn get_pipeline(device: &Arc<Device>, vertex_buffer_description: VertexBufferDes
             .into_pipeline_layout_create_info(device.clone())?,
     )?;
 
-    let subpass = Subpass::from(render_pass.clone(), 0).explicit_unwrap();
+    let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
     Ok(GraphicsPipeline::new(
         device.clone(),
@@ -611,12 +611,12 @@ impl Graphics {
             },
         )?;
 
-        let queue = queues.next().explicit_unwrap();
+        let queue = queues.next().unwrap();
 
         let caps = physical_device
             .surface_capabilities(&surface, Default::default())?;
         
-        let composite_alpha = caps.supported_composite_alpha.into_iter().next().explicit_unwrap();
+        let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
         let image_format =  physical_device
             .surface_formats(&surface, Default::default())?
             .into_iter()

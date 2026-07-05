@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use gl_types::{matrices::{Mat4, MatN as _}, vec4, vectors::{Vec2, Vec3, VecN}};
+use crate::engine::gl_types::{matrices::{Mat4, MatN as _}, vectors::{Vec2, Vec3, VecN, vec4}};
 use vulkano::{buffer::Subbuffer, command_buffer::DrawIndexedIndirectCommand, padded::Padded, pipeline::graphics::vertex_input::Vertex};
 
 use crate::{engine::graphics::{Binding, BufferType, Graphics, PipelineBuilder, PipelineHandle, sprite_renderer::{animated_sprite::vertex_shader::{InputData, spriteSSBO}, error::{NewAnimatedSpriteError, SpriteRendererBufferError, SpriteRendererUpdateError}}, texture::Texture}, error::Result};
@@ -12,7 +12,7 @@ mod vertex_shader {
         root_path_env: "CARGO_MANIFEST_DIR"
     }
 
-    #[allow(clippy::derivable_impls)]
+    #[allow(clippy::derivable_impls, reason="Cannot add a derive attribute to generated code.")]
     impl Default for InputData {
         fn default() -> Self {
             Self { view: Default::default(), projection: Default::default() }
@@ -49,7 +49,7 @@ const INDEX_DATA: &[u32] = &[
     2, 1, 3
 ];
 
-pub struct AnimatedSpriteData {
+pub(in crate::engine::graphics) struct AnimatedSpriteData {
     pub position: Vec3,
     pub anchor: Vec2,
     pub dimensions: Vec2,
@@ -62,7 +62,7 @@ impl From<AnimatedSpriteData> for vertex_shader::Sprite {
     }
 }
 
-pub struct AnimatedSprite {
+pub(in crate::engine::graphics) struct AnimatedSprite {
     pub name: String,
     pub pipeline: PipelineHandle,
     pub render_queue: Vec<Padded<vertex_shader::Sprite, 12>>,

@@ -1,13 +1,14 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign}};
 
+use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix2, Vector2};
 
-use crate::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec2, GLScalar, Make};
+use crate::engine::gl_types::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec2, GLScalar, Make};
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
-pub struct Mat2(pub(in crate) Matrix2<f32>);
+#[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
+pub struct Mat2(pub(in crate::engine::gl_types) Matrix2<f32>);
 
 impl Debug for Mat2 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -19,7 +20,7 @@ impl Mat2 {
     pub const ZERO: Mat2 = Mat2::_new(0.0, 0.0, 0.0, 0.0);
     pub const IDENTITY: Mat2 = Mat2::_new(1.0, 0.0, 0.0, 1.0);
 
-    pub(in crate) const fn _new(m11: f32, m12: f32, m21: f32, m22: f32) -> Self {
+    pub(in crate::engine::gl_types) const fn _new(m11: f32, m12: f32, m21: f32, m22: f32) -> Self {
         Self(Matrix2::new(m11, m12, m21, m22))
     }
 }
@@ -76,29 +77,31 @@ impl Mat2Constructor<super::Mat4> for Mat2 {
 macro_rules! mat2 {
     ($a:expr, $b:expr, $c:expr, $d:expr) => {
         {
-            use $crate::matrices::Mat2Constructor;
-            $crate::matrices::Mat2::new(($a, $b, $c, $d))
+            use $crate::engine::gl_types::matrices::Mat2Constructor;
+            $crate::engine::gl_types::matrices::Mat2::new(($a, $b, $c, $d))
         }
     };
     ($a:expr, $b:expr) => {
         {
-            use $crate::matrices::Mat2Constructor;
-            $crate::matrices::Mat2::new(($a, $b))
+            use $crate::engine::gl_types::matrices::Mat2Constructor;
+            $crate::engine::gl_types::matrices::Mat2::new(($a, $b))
         }
     };
     ($a:expr) => {
         {
-            use $crate::matrices::Mat2Constructor;
-            $crate::matrices::Mat2::new($a)
+            use $crate::engine::gl_types::matrices::Mat2Constructor;
+            $crate::engine::gl_types::matrices::Mat2::new($a)
         }
     };
     () => {
         {
-            use $crate::matrices::Mat2Constructor;
-            $crate::matrices::Mat2::new(0)
+            use $crate::engine::gl_types::matrices::Mat2Constructor;
+            $crate::engine::gl_types::matrices::Mat2::new(0)
         }
     };
 }
+
+pub use mat2;
 
 impl InnerMatrix<2, 2> for Mat2 {
     fn get_inner_matrix(&self) -> &nalgebra::Matrix<f32, nalgebra::Const<2>, nalgebra::Const<2>, nalgebra::ArrayStorage<f32, 2, 2>> {

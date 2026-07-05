@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc, time::{Duration, Instant}};
 
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{self, EventLoop}, monitor::MonitorHandle, platform::pump_events::EventLoopExtPumpEvents, window::{Fullscreen, Window, WindowAttributes}};
 
-use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, graphics::{Graphics, sprite_renderer::SpriteRenderer, terrain::terrain_renderer::TerrainRenderer}, input::{self, Input, Key}}, error::{ExplicitUnwrap, MessageErorr, Result, any::Error}};
+use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, graphics::{Graphics, sprite_renderer::SpriteRenderer, terrain::terrain_renderer::TerrainRenderer}, input::{self, Input, Key}, resources::ResourceManager}, error::{MessageErorr, Result, any::Error}};
 
 #[derive(Debug)]
 pub enum WindowMode {
@@ -23,6 +23,7 @@ pub struct Engine {
     pub gfx: Graphics,
     pub world: World,
     pub input: Input,
+    pub resource_manager: ResourceManager,
     pub(in crate::engine) sprite_renderer: SpriteRenderer,
     pub(in crate::engine) terrain_renderer: TerrainRenderer,
     fixed_tick_duration: f64,
@@ -104,8 +105,8 @@ impl ApplicationHandler for Engine {
             WindowEvent::Resized(size) => {
                 self.gfx.window_resized();
                 let new_aspect = size.width as f32 / size.height as f32;
-                if let Some(main_camera) = self.world.get_main_camera() {
-                    main_camera.borrow_mut().update_aspect(new_aspect);
+                if let Some(main_camera) = self.world.get_main_camera_mut() {
+                    main_camera.update_aspect(new_aspect);
                 }
             },
             WindowEvent::RedrawRequested => {
@@ -114,7 +115,7 @@ impl ApplicationHandler for Engine {
                     return;
                 }
 
-                self.update().explicit_unwrap();
+                self.update().unwrap();
 
                 self.window.request_redraw();
             }
@@ -147,7 +148,7 @@ impl Engine {
         impl ApplicationHandler for WindowInitializer {
             fn resumed(&mut self, event_loop: &event_loop::ActiveEventLoop) {
                 let WindowStatus::Uninitialized(window_attributes) = std::mem::take(&mut self.0) else { return };
-                self.0 = WindowStatus::Initialized(#[allow(clippy::unwrap_used)] event_loop.create_window(*window_attributes).unwrap());
+                self.0 = WindowStatus::Initialized(#[allow(clippy::unwrap_used, reason="No way to pass a result, plus this error is likely unrecoverable anyway.")] event_loop.create_window(*window_attributes).unwrap());
             }
         
             fn window_event(&mut self, _: &event_loop::ActiveEventLoop, _: winit::window::WindowId, _: WindowEvent) {}
@@ -165,7 +166,7 @@ impl Engine {
         let mut gfx = Graphics::new(window.clone(), &event_loop)?;
         let sprite_renderer = SpriteRenderer::new();
         let terrain_renderer = TerrainRenderer::new(&mut gfx)?;
-        let engine = Engine { window, gfx, world, input: Input::new(), sprite_renderer, terrain_renderer, error_queue: Vec::new(),fixed_tick_duration: 1.0 / 60.0, initialization_time: Instant::now(), last_tick: 0.0, last_fixed_tick: 0.0, fixed_tick_overflow: 0.0, should_close: false, _event_loop: Some(event_loop) };
+        let engine = Engine { window, gfx, world, input: Input::new(), resource_manager: ResourceManager::new(), sprite_renderer, terrain_renderer, error_queue: Vec::new(),fixed_tick_duration: 1.0 / 60.0, initialization_time: Instant::now(), last_tick: 0.0, last_fixed_tick: 0.0, fixed_tick_overflow: 0.0, should_close: false, _event_loop: Some(event_loop) };
 
         Ok(engine)
     }
@@ -204,18 +205,21 @@ impl Engine {
             self.last_fixed_tick = current_time;
         }
 
-        if let Some(camera) = self.world.get_main_camera() {
-            let mut camera = camera.borrow_mut();
+        if let Some(camera) = self.world.get_main_camera_mut() {
+            let view_matrix = camera.view_matrix();
+            let projection_matrix = camera.projection_matrix();
+            let position = camera.position();
 
-            let result = self.sprite_renderer.update(&self.gfx, &camera.view_matrix(), &camera.projection_matrix());
+            let result = self.sprite_renderer.update(&self.gfx, &view_matrix, &projection_matrix);
             self.log_error(result);
 
-            let result = self.terrain_renderer.update(&self.gfx, camera.view_matrix(), camera.projection_matrix(), camera.position());
+            let result = self.terrain_renderer.update(&self.gfx, view_matrix, projection_matrix, position);
             self.log_error(result);
         }
 
         for (owner, component) in self.world.get_removed_components() {
-            let mut component = Rc::into_inner(component).explicit_expect("Cannot remove component due to Rc leak.").into_inner();
+            #[allow(clippy::unwrap_used, reason="Rc should never leak, if it does crashing is justified.")]
+            let mut component = Rc::into_inner(component).expect("Cannot remove component due to Rc leak.").into_inner();
             let result = component.on_remove(self, owner);
             self.log_error(result);
         }

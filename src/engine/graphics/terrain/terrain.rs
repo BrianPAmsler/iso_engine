@@ -1,8 +1,9 @@
 use bytemuck::{Pod, Zeroable};
+use derive_serialize::Serialize;
 use image::{ImageBuffer, Luma};
 use vulkano::{format::Format, image::sampler::Filter, pipeline::graphics::vertex_input::Vertex};
 
-use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, texture::{Texture, builder::TextureBuilder}, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}}}, error::{ExplicitUnwrap, OutOfBounds, Result, Uninitialized}};
+use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}, texture::{Texture, builder::TextureBuilder}}}, error::{OutOfBounds, Result, Uninitialized}};
 
 const VERTEX_DATA: &[TerrainVertex] = &[
     // [0]: Bottom-Left Corner
@@ -119,6 +120,7 @@ impl Default for TerrainInner {
     }
 }
 
+#[derive(Serialize)]
 pub struct Terrain(TerrainInner);
 
 const ALIGNED_BYTES_PER_COLOR: usize = 4;
@@ -192,10 +194,10 @@ impl Terrain {
         unsafe {
             let ptr = color_data[..].as_mut_ptr();
             let i = (x * 2 + z * *width * 4) as usize * ALIGNED_BYTES_PER_COLOR; // spooky numbers
-            let bottom_left_color = (std::slice::from_raw_parts_mut(ptr.add(i), BYTES_PER_COLOR)).try_into().explicit_unwrap();
-            let bottom_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().explicit_unwrap();
-            let top_left_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2), BYTES_PER_COLOR)).try_into().explicit_unwrap();
-            let top_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2 + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().explicit_unwrap();
+            let bottom_left_color = (std::slice::from_raw_parts_mut(ptr.add(i), BYTES_PER_COLOR)).try_into().unwrap();
+            let bottom_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
+            let top_left_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2), BYTES_PER_COLOR)).try_into().unwrap();
+            let top_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2 + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
 
             let height_data_width = *width + 1;
 
@@ -268,7 +270,7 @@ impl Component for Terrain {
         let height_map = height_map.to_rgb8();
         let (width, height) = height_map.dimensions();
         let height_map: Vec<u8> = height_map.into_raw().into_iter().step_by(3).collect();
-        let height_map: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, height_map).explicit_unwrap();
+        let height_map: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, height_map).unwrap();
 
         // Height map uses offset pixel grid, so it ends up being +1 in each dimension.
         let (width, height) = (width - 1, height - 1);

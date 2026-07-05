@@ -1,6 +1,6 @@
 use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, hash::Hash, ops::DerefMut};
 
-use crate::error::{ExplicitUnwrap, Result};
+use crate::error::Result;
 use image::{RgbaImage, imageops};
 use lazy_static::lazy_static;
 
@@ -45,10 +45,9 @@ impl Ord for ImageCell {
     }
 }
 
-#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for ImageCell {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.size().partial_cmp(&other.size()).map(|c| c.reverse())
+        Some(self.cmp(other))
     }
 }
 
@@ -308,7 +307,7 @@ impl SpriteSheetBuilder {
         let mut q = VecDeque::new();
         q.push_back(root);
         while !q.is_empty() {
-            let mut node = q.pop_front().explicit_unwrap();
+            let mut node = q.pop_front().unwrap();
 
             if let Some(ImageCell { img, name }) = node.img.take() {
                 if img.width() > 0 && img.height() > 0 {
@@ -375,30 +374,28 @@ mod tests {
 
     use pathbuf::pathbuf;
 
-    use crate::{error::ExplicitUnwrap};
-
     use super::SpriteSheetBuilder;
 
     #[test]
     #[ignore="output must be manually verified"]
     fn spritesheet_build() {
-        let dir = std::fs::read_dir(pathbuf!("test_files", "input", "test_sprites")).explicit_unwrap();
+        let dir = std::fs::read_dir(pathbuf!("test_files", "input", "test_sprites")).unwrap();
         let mut files = Vec::new();
         for file in dir.flatten() { if let Some(ext) = file.path().extension() { if ext == OsStr::new("png") {
             files.push(file.path());
         } } }
 
         let mut builder = SpriteSheetBuilder::new(100000000);
-        files.into_iter().map(|file| (image::open(&file).explicit_unwrap().to_rgba8(), file.file_name().explicit_unwrap().to_str().explicit_unwrap().to_owned()))
+        files.into_iter().map(|file| (image::open(&file).unwrap().to_rgba8(), file.file_name().unwrap().to_str().unwrap().to_owned()))
         .for_each(|(img, name)| {
             builder.add_image(img, name);
         });
 
-        let sprite_sheet = builder.try_build().explicit_unwrap();
+        let sprite_sheet = builder.try_build().unwrap();
         
-        let mut sheet_file = OpenOptions::new().create(true).write(true).open(pathbuf!("test_files", "output", "sprite_sheet.png")).explicit_unwrap();
+        let mut sheet_file = OpenOptions::new().create(true).write(true).open(pathbuf!("test_files", "output", "sprite_sheet.png")).unwrap();
         
-        sprite_sheet.sheet.write_to(&mut sheet_file, image::ImageFormat::Png).explicit_unwrap();
+        sprite_sheet.sheet.write_to(&mut sheet_file, image::ImageFormat::Png).unwrap();
 
         panic!("This test is not automated. Manually verify the result at: test_files/output/sprite_sheet.png");
     }

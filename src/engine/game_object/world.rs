@@ -1,10 +1,9 @@
-#![allow(clippy::type_complexity)]
 use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, rc::Rc};
 
-use gl_types::vectors::Vec3;
+use crate::engine::gl_types::vectors::Vec3;
 use itertools::{Either::{Left, Right}, Itertools};
 
-use crate::{engine::{Engine, data_structures::{AllocationIndex, VecAllocator}, game_object::{error::{ComponentDowncastError, unions::{ComponentBorrowError, ComponentError, ObjectError}}, game_object::Transform}, graphics::Camera}, error::{ExplicitUnwrap, Result}};
+use crate::{engine::{Engine, data_structures::{AllocationIndex, VecAllocator}, game_object::{error::{ComponentDowncastError, unions::{ComponentBorrowError, ComponentError, ObjectError}}, game_object::Transform}, graphics::Camera}, error::{Result}};
 use crate::error::{Error, any::Error as AnyError};
 
 use super::{component::Component, game_object::GameObject};
@@ -75,7 +74,7 @@ pub struct World {
     ordered_components: BTreeMap<i32, HashSet<ComponentID>>,
     uninitialized_components: BTreeMap<i32, HashSet<ComponentID>>,
     removed_comonents: Vec<(ObjectID, Rc<RefCell<Box<dyn Component>>>)>,
-    main_camera: Option<Rc<RefCell<Camera>>> // yikes
+    main_camera: Option<Camera>
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -192,11 +191,15 @@ impl World {
         errors
     }
 
-    pub fn get_main_camera(&self) -> Option<Rc<RefCell<Camera>>> {
-        self.main_camera.clone()
+    pub fn get_main_camera(&self) -> Option<&Camera> {
+        self.main_camera.as_ref()
     }
 
-    pub fn set_main_camera(&mut self, camera: Rc<RefCell<Camera>>) {
+    pub fn get_main_camera_mut(&mut self) -> Option<&mut Camera> {
+        self.main_camera.as_mut()
+    }
+
+    pub fn set_main_camera(&mut self, camera: Camera) {
         self.main_camera = Some(camera)
     }
 
@@ -225,6 +228,25 @@ impl World {
         let object = self.objects.get_mut(object.idx)?;
 
         let id = ComponentID { index, type_: TypeId::of::<C>(), owner };
+        object.components.push(id);
+
+        let set = self.ordered_components.entry(priority).or_default();
+        set.insert(id);
+
+        let uninitialized = self.uninitialized_components.entry(priority).or_default();
+        uninitialized.insert(id);
+
+        Ok(())
+    }
+
+    pub fn add_component_any(&mut self, object: ObjectID, component: Box<dyn Component>) -> Result<(), ObjectError> {
+        let priority = *component.priority();
+        let type_ = (*component).type_id();
+        let index = self.components.insert(Rc::new(RefCell::new(component)));
+        let owner = object;
+        let object = self.objects.get_mut(object.idx)?;
+
+        let id = ComponentID { index, type_, owner };
         object.components.push(id);
 
         let set = self.ordered_components.entry(priority).or_default();
@@ -339,10 +361,10 @@ impl World {
         // update child parent -> update previous parent's children -> update new parent's children
         obj.parent = parent;
 
-        let prev_parent = self.objects.get_mut(prev_parent.idx).explicit_unwrap(); // This should already be valid so unwrap
+        let prev_parent = self.objects.get_mut(prev_parent.idx).unwrap(); // This should already be valid so unwrap
         prev_parent.children.remove(&object);
 
-        let new_parent = self.objects.get_mut(parent.idx).explicit_unwrap();
+        let new_parent = self.objects.get_mut(parent.idx).unwrap();
         new_parent.children.insert(object);
 
         Ok(())
@@ -361,7 +383,7 @@ impl World {
     pub fn destroy(&mut self, object: ObjectID) -> Result<(), ObjectError> {
         let obj = self.objects.get(object.idx)?;
 
-        let parent = self.objects.get_mut(obj.parent.idx).explicit_unwrap(); // This should already be valid so unwrap
+        let parent = self.objects.get_mut(obj.parent.idx).unwrap(); // This should already be valid so unwrap
         parent.children.remove(&object);
 
         self.objects.remove(object.idx)?;

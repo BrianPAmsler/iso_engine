@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["error", "error/macros", "gl_types", "gl_types/multi-impl", "gl_types/swizz"]
+members = ["derive-serialize","error", "error/macros", "multi-impl", "swizz"]
 resolver = "3"
 
 [dependencies]
-gl_types = { path = "./gl_types" }
+multi-impl = { path = "multi-impl" }
+swizz = { path = "swizz" }
 backtrace = "0.3.73"
 const_format = "0.2.32"
 downcast-rs = "1.2.0"
@@ -31,11 +32,32 @@ vulkano-shaders = "0.35.0"
 bytemuck = "1.25.0"
 error = { version = "0.1.0", path = "error" }
 resource-packager = { git = "https://github.com/BrianPAmsler/resource_packager.git", version = "0.1.0" }
+delegate = "0.13.5"
+serde = "1.0.228"
+serde_json = "1.0.150"
+postcard = "1.1.3"
+derive-serialize = { version = "0.1.0", path = "derive-serialize" }
+taffy = "0.11.0"
+quick-xml = "0.41.0"
+nalgebra = "0.33.1"
+typenum = "1.17.0"
+num = "0.4.3"
 
 # [profile.release]
 # debug=true
 
 [dev-dependencies]
 tempfile = "3.24.0"
+shh = "1.0.1"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.lints.clippy]
+module_inception = "allow"
+
+unwrap_used = "warn"
+expect_used = "warn"
+empty_structs_with_brackets = "warn"
+
+allow_attributes_without_reason = "forbid"
+
+[workspace.lints.rust]
+unsafe_code = "deny"

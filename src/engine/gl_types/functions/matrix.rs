@@ -1,17 +1,15 @@
-#![allow(non_snake_case)]
-
 use core::f32;
 
-use crate::{matrices::MatN, vectors::VecN};
+use crate::engine::gl_types::{matrices::MatN, vectors::VecN};
 
-pub fn matrixCompMult<const N: usize, M: MatN<N>, R: AsRef<M>>(x: R, y: R) -> M {
+pub fn matrix_comp_mult<const N: usize, M: MatN<N>, R: AsRef<M>>(x: R, y: R) -> M {
     let a = x.as_ref().get_inner_matrix();
     let b = y.as_ref().get_inner_matrix();
 
     M::make(a.component_mul(&b))
 }
 
-pub fn outerProduct<const N: usize, V: VecN<N>, M: MatN<N>, R: AsRef<V>>(x: R, y: R) -> M {
+pub fn outer_product<const N: usize, V: VecN<N>, M: MatN<N>, R: AsRef<V>>(x: R, y: R) -> M {
     let a = x.as_ref().get_inner_matrix();
     let b = y.as_ref().get_inner_matrix();
 
