@@ -4,7 +4,7 @@ use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix2, Vector2};
 
-use crate::engine::gl_types::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec2, GLScalar, Make};
+use crate::engine::gl_types::{GLScalar, Make, inner_matrix::InnerMatrix, matrices::MatN, matrix_arithmetic, private::Seal, vectors::Vec2};
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
@@ -22,6 +22,22 @@ impl Mat2 {
 
     pub(in crate::engine::gl_types) const fn _new(m11: f32, m12: f32, m21: f32, m22: f32) -> Self {
         Self(Matrix2::new(m11, m12, m21, m22))
+    }
+}
+
+impl serde::Serialize for Mat2 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        self.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Mat2 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        Ok(Self::from_array(<[_; _]>::deserialize(deserializer)?))
     }
 }
 

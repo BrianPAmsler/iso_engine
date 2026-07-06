@@ -13,7 +13,7 @@ pub struct AlignedVec2(pub [u32; 2]);
 #[derive(Debug, Default, BufferContents, Clone, Copy, PartialEq)]
 pub struct AlignedVec3(pub [f32; 3]);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct PipelineHandle {
     handle: AllocationIndex 
 }

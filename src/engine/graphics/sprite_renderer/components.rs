@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, path::PathBuf, sync::Arc};
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader, serialization::AsSerialize}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
 use derive_serialize::Serialize;
 use itertools::Itertools;
 use resource_packager::packager::read::DirEntry;
@@ -45,6 +45,12 @@ impl SpriteSheet {
         Ok(self.id.ok_or(Uninitialized)?)
     }
 }
+
+// impl AsSerialize for SpriteSheet {
+//     fn as_serialize(&self) -> Option<&dyn crate::engine::resources::serialization::Serialize> {
+//         Some(self as &dyn crate::engine::resources::serialization::Serialize)
+//     }
+// }
 
 impl Component for SpriteSheet {
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
@@ -126,6 +132,7 @@ pub struct AnimatedSprite {
     #[serialized]
     name: String,
     pub anchor: Vec2,
+    #[non_serialized]
     pub current_frame: f32,
     pub framerate: f32,
     pub paused: bool,

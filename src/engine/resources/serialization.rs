@@ -1,6 +1,6 @@
 use std::{any::Any, borrow::Cow, cell::{LazyCell, RefCell}, collections::HashMap, fmt::Debug, marker::PhantomData, path::PathBuf};
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum FieldValue {
     Int(i128),
     UInt(u128),
@@ -17,7 +17,7 @@ pub enum FieldValue {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct StructRepr {
     type_name: Cow<'static, str>,
     fields: HashMap<Cow<'static, str>, FieldValue>
@@ -46,6 +46,12 @@ pub trait Serialize: Any {
 
     fn type_name_val(&self) -> &'static str;
     fn type_name() -> &'static str where Self: Sized;
+}
+
+pub trait AsSerialize {
+    fn as_serialize(&self) -> Option<&dyn Serialize> {
+        None
+    }
 }
 
 #[doc(hidden)]
@@ -174,7 +180,7 @@ pub mod hidden {
         FieldValue: ConvertFrom<T>
     {
         fn convert_from(value: &Arc<T>) -> Self {
-            value.convert_into()
+            value.deref().convert_into()
         }
     }
     
@@ -227,6 +233,21 @@ pub mod hidden {
                     Ok(list.try_into().map_err(|_| IncorrectFields)?)
                 },
                 _ => Err(IncorrectFields)?
+            }
+        }
+    }
+
+    impl ConvertFrom<Vec<FieldValue>> for FieldValue {
+        fn convert_from(value: &Vec<FieldValue>) -> Self {
+            FieldValue::List(value.clone())
+        }
+    }
+
+    impl TryConvertFrom<FieldValue> for Vec<FieldValue> {
+        fn try_convert_from(value: FieldValue) -> Result<Self, DeserializeError> {
+            match value {
+                FieldValue::List(vec) => Ok(vec),
+                _ => Err(IncorrectType)?
             }
         }
     }
@@ -450,7 +471,7 @@ mod tests {
     use std::ops::Deref;
     use std::io::Read;
 
-    use crate::{engine::{game_object::component::Component, resources::serialization::{CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}}};
+    use crate::engine::{game_object::component::Component, resources::serialization::{AsSerialize, CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}};
 
     #[derive(Debug, derive_serialize::Serialize)]
     #[allow(unused, reason="test")]

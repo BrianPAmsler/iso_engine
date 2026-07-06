@@ -4,13 +4,29 @@ use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix, Vector3};
 
-use crate::engine::gl_types::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
+use crate::engine::gl_types::{GLScalar, Make, inner_matrix::InnerMatrix, private::Seal, vector_arithmetic, vectors::VecN};
 
 use super::{Vec2, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
 pub struct Vec3(pub(in crate::engine::gl_types) Vector3<f32>);
+
+impl serde::Serialize for Vec3 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        self.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Vec3 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        Ok(Self::from_array(<[_; _]>::deserialize(deserializer)?))
+    }
+}
 
 impl Debug for Vec3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -34,7 +34,7 @@ impl<T: Clone> Clone for VecAllocator<T> {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct AllocationIndex {
     allocator_id: u128,
     index: usize,
@@ -220,6 +220,23 @@ impl<T> VecAllocator<T> {
 
     pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, T> {
         IterMut { slice: &mut self.vec, allocator_id: self.id, index: 0  }
+    }
+
+    pub fn contains(&self, element: AllocationIndex) -> bool {
+        if !element.ptr_eq(self) {
+            return false;
+        }
+
+        match &self.vec[element.index] {
+            Slot::Element { id, .. } => {
+                if *id != element.id {
+                    false
+                } else {
+                    true
+                }
+            },
+            Slot::Hole { .. } => false,
+        }
     }
 }
 

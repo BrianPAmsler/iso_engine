@@ -5,7 +5,7 @@ use derive_serialize::Serialize;
 use image::{GrayImage, ImageBuffer, ImageError, Luma, RgbImage, RgbaImage};
 use vulkano::{format::Format, image::sampler::Filter, pipeline::graphics::vertex_input::Vertex};
 
-use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}, texture::{Texture, builder::TextureBuilder}}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{OutOfBounds, Result, TryUnwrap, Uninitialized}};
+use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}, texture::{Texture, builder::TextureBuilder}}, resources::{ResourceHandle, resource_loaders::ImageLoader, serialization::AsSerialize}}, error::{OutOfBounds, Result, TryUnwrap, Uninitialized}};
 
 const VERTEX_DATA: &[TerrainVertex] = &[
     // [0]: Bottom-Left Corner
@@ -98,6 +98,7 @@ impl<'a> TerrainCellMut<'a> {
     }
 }
 
+#[derive(Debug)]
 struct TerrainInner {
     height_data: Vec<u8>,
     color_data: Vec<u8>,
@@ -110,7 +111,7 @@ struct TerrainInner {
     color_dirty: bool
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Terrain {
     #[serialized]
     height_file: PathBuf,
@@ -126,7 +127,7 @@ const BYTES_PER_COLOR: usize = 3;
 const COLORS_PER_CELL: usize = 4;
 
 impl Terrain {
-    pub fn new<'a, P1: Into<PathBuf>, P2: Into<PathBuf>>(height_file: P1, color_file: P2) -> Terrain {
+    pub fn new<P1: Into<PathBuf>, P2: Into<PathBuf>>(height_file: P1, color_file: P2) -> Terrain {
         Terrain { height_file: height_file.into(), color_file: color_file.into(), data: None, height_handle: None, color_handle: None }
     } 
 
@@ -258,7 +259,7 @@ impl Terrain {
 }
 
 impl Component for Terrain {
-    fn init(&mut self, engine: &mut crate::engine::Engine, owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
+    fn init(&mut self, engine: &mut crate::engine::Engine, _: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
         self.height_handle = Some(engine.resource_manager.load(ImageLoader::<GrayImage>::new(), &self.height_file)?);
         self.color_handle = Some(engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), &self.color_file)?);
 

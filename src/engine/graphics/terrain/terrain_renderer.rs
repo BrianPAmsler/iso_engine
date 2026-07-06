@@ -71,7 +71,7 @@ impl TerrainRenderer {
         self.render_queue.push(TerrainInfo { width, height, pipeline });
     }
 
-    pub fn update(&mut self, gfx: &Graphics, view_matrix: Mat4, projection_matrix: Mat4, camera_pos: Vec3) -> Result<(), TerrainRendererUpdateError>{
+    pub fn update(&mut self, gfx: &Graphics, view_matrix: Mat4, projection_matrix: Mat4, camera_pos: Vec3) -> Result<(), TerrainRendererUpdateError> {
         for terrain in self.render_queue.drain(..) {
             match gfx.get_binding(terrain.pipeline, 0)? {
                 Binding::Buffer(vertex_uniforms) => {

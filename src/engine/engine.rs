@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc, time::{Duration, Instant}};
 
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{self, EventLoop}, monitor::MonitorHandle, platform::pump_events::EventLoopExtPumpEvents, window::{Fullscreen, Window, WindowAttributes}};
 
-use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, graphics::{Graphics, sprite_renderer::SpriteRenderer, terrain::terrain_renderer::TerrainRenderer}, input::{self, Input, Key}, resources::ResourceManager}, error::{MessageErorr, Result, any::Error}};
+use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, gl_types::{matrices::{Mat2, Mat3, Mat4}, vectors::{Vec2, Vec3, Vec4}}, graphics::{Graphics, sprite_renderer::{SpriteRenderer, components::{AnimatedSprite, AnimatedSpriteLoader, Sprite, SpriteSheet}}, terrain::{Terrain, terrain_renderer::TerrainRenderer}}, input::{self, Input, Key}, resources::ResourceManager}, error::{MessageErorr, Result, any::Error}, register_serializable_types};
 
 #[derive(Debug)]
 pub enum WindowMode {
@@ -167,6 +167,10 @@ impl Engine {
         let mut gfx = Graphics::new(window.clone(), &event_loop)?;
         let sprite_renderer = SpriteRenderer::new();
         let terrain_renderer = TerrainRenderer::new(&mut gfx)?;
+
+        // TODO: write a build script that finds all serializable types
+        register_serializable_types!(SpriteSheet, Sprite, AnimatedSprite, AnimatedSpriteLoader, Terrain, Mat2, Mat3, Mat4, Vec2, Vec3, Vec4);
+
         let engine = Engine { window, gfx, world, input: Input::new(), resource_manager: ResourceManager::new(), sprite_renderer, terrain_renderer, error_queue: Vec::new(),fixed_tick_duration: 1.0 / 60.0, initialization_time: Instant::now(), last_tick: 0.0, last_fixed_tick: 0.0, fixed_tick_overflow: 0.0, should_close: false, _event_loop: Some(event_loop) };
 
         Ok(engine)

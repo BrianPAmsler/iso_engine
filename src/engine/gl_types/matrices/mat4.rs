@@ -4,7 +4,7 @@ use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix4, Vector4};
 
-use crate::engine::gl_types::{inner_matrix::InnerMatrix, matrix_arithmetic, private::Seal, vectors::Vec4, GLScalar, Make};
+use crate::engine::gl_types::{GLScalar, Make, inner_matrix::InnerMatrix, matrices::MatN, matrix_arithmetic, private::Seal, vectors::Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Serialize)]
@@ -23,6 +23,22 @@ impl Mat4 {
     #[allow(clippy::too_many_arguments, reason="Mat4 requires 16 values. Builder pattern or struct parameters do not make sense. Passing an [f32; 16] is less clear.")]
     pub(in crate::engine::gl_types) const fn _new(m11: f32, m12: f32, m13: f32, m14: f32, m21: f32, m22: f32, m23: f32, m24: f32, m31: f32, m32: f32, m33: f32, m34: f32, m41: f32, m42: f32, m43: f32, m44: f32) -> Self {
         Self(Matrix4::new(m11, m12, m13, m14, m21, m22, m23, m24, m31, m32, m33, m34, m41, m42, m43, m44))
+    }
+}
+
+impl serde::Serialize for Mat4 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        self.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Mat4 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        Ok(Self::from_array(<[_; _]>::deserialize(deserializer)?))
     }
 }
 

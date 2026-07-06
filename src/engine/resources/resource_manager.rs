@@ -5,6 +5,7 @@ use resource_packager::packager::{ResourcePackagerError, read::DirEntry};
 
 use crate::{engine::resources::{error::{InvalidDowncast, LoadError, ResourceError, ResourceLoadError}, pack::AssetPack}, error::Result};
 
+#[derive(Debug)]
 pub struct ResourceHandle<T: ?Sized + 'static, E: std::error::Error + ?Sized> {
     data: Arc<ResourceData>,
     status: Arc<RwLock<ResourceStatus>>,
@@ -181,6 +182,7 @@ impl<T: ?Sized, E: std::error::Error + ?Sized> ResourceHandleWeak<T, E> {
     }
 }
 
+#[derive(Debug)]
 enum ResourceStatus {
     Unloaded,
     Loading,

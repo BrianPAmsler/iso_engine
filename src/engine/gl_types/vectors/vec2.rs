@@ -4,7 +4,7 @@ use derive_serialize::Serialize;
 use multi_impl::multi_impl;
 use nalgebra::{Matrix, Vector2};
 
-use crate::engine::gl_types::{inner_matrix::InnerMatrix, vector_arithmetic, private::Seal, GLScalar, Make};
+use crate::engine::gl_types::{GLScalar, Make, inner_matrix::InnerMatrix, private::Seal, vector_arithmetic, vectors::VecN};
 
 use super::{Vec3, Vec4};
 
@@ -24,6 +24,22 @@ impl Vec2 {
 
     pub(in crate::engine::gl_types) const fn _new(x: f32, y: f32) -> Self {
         Self(Vector2::new(x, y))
+    }
+}
+
+impl serde::Serialize for Vec2 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        self.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Vec2 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        Ok(Self::from_array(<[_; _]>::deserialize(deserializer)?))
     }
 }
 

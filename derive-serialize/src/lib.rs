@@ -61,7 +61,7 @@ fn derive_struct(_attrs: Vec<Attribute>, _vis: Visibility, ident: Ident, generic
     quote! {
         impl #impl_generics #name #type_generics #where_clause {
             const TYPE_IDENTIFIER: &str = ::std::concat!(::std::module_path!(), "::", #name_str);
-        } 
+        }
 
         impl #impl_generics #crate_path::Serialize for #name #type_generics #where_clause {
             fn deserialize(mut fields: #crate_path::StructRepr) -> ::std::result::Result<Box<Self>, #crate_path::error::DeserializeError> where Self: Sized {
@@ -92,6 +92,12 @@ fn derive_struct(_attrs: Vec<Attribute>, _vis: Visibility, ident: Ident, generic
 
             fn type_name_val(&self) -> &'static str {
                 Self::TYPE_IDENTIFIER
+            }
+        }
+
+        impl #impl_generics #crate_path::AsSerialize for #name #type_generics #where_clause {
+            fn as_serialize(&self) -> Option<&dyn #crate_path::Serialize> {
+                Some(self as &dyn #crate_path::Serialize)
             }
         }
     }.into()

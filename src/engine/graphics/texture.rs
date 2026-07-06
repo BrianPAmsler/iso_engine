@@ -6,7 +6,7 @@ use crate::{engine::graphics::error::BufferImageError, error::Result};
 
 use super::Graphics;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Texture {
     image: Arc<Image>,
     view: Arc<ImageView>,

@@ -1,7 +1,9 @@
 use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, rc::Rc};
 
-use crate::engine::gl_types::vectors::Vec3;
+use crate::engine::{game_object::game_object::serialize, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
+use derive_serialize::Serialize;
 use itertools::{Either::{Left, Right}, Itertools};
+use serde::{Deserialize as _, Serialize as _};
 
 use crate::{engine::{Engine, data_structures::{AllocationIndex, VecAllocator}, game_object::{error::{ComponentDowncastError, unions::{ComponentBorrowError, ComponentError, ObjectError}}, game_object::Transform}, graphics::Camera}, error::{Result}};
 use crate::error::{Error, any::Error as AnyError};
@@ -81,14 +83,14 @@ pub struct World {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ObjectID {
-    idx: AllocationIndex
+    pub(in crate::engine::game_object) idx: AllocationIndex
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ComponentID {
-    index: AllocationIndex,
-    owner: ObjectID,
-    type_: TypeId
+    pub(in crate::engine::game_object) index: AllocationIndex,
+    pub(in crate::engine::game_object) owner: ObjectID,
+    pub(in crate::engine::game_object) type_: TypeId
 }
 
 impl World {
@@ -97,7 +99,7 @@ impl World {
         let root = objects.insert(GameObject { name: "root".to_owned(), parent: ObjectID { idx: AllocationIndex::null() }, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new() });
         let root = ObjectID { idx: root };
 
-        World {
+        let mut world = World {
             root,
             objects,
             components: VecAllocator::new(),
@@ -105,7 +107,12 @@ impl World {
             uninitialized_components: BTreeMap::new(),
             removed_comonents: Vec::new(),
             main_camera: None
-        }
+        };
+
+        #[allow(clippy::unwrap_used, reason = "Root is for sure valid.")]
+        world.add_component(root, RootComponent::default()).unwrap();
+
+        world
     }
 
     fn init(engine: &mut Engine) -> Vec<AnyError> {
@@ -263,6 +270,10 @@ impl World {
     pub fn remove_component(&mut self, component: ComponentID) -> Result<(), ComponentError> {
         let c = self.components.remove(component.index)?;
 
+        #[allow(clippy::unwrap_used, reason = "If the code is correct, I'm pretty sure it should be impossible a component to exist without a parent.")]
+        let owner = self.objects.get_mut(component.owner.idx).unwrap();
+        owner.components.retain(|e| *e != component);
+
         match self.ordered_components.get_mut(c.borrow().priority()) {
             Some(list) => list.remove(&component),
             None => unreachable!(),
@@ -385,15 +396,66 @@ impl World {
     }
 
     pub fn destroy(&mut self, object: ObjectID) -> Result<(), ObjectError> {
+        let todo = (); // TODO: This is wrong. Doesn't forbid removing root, doesn't recursively remove children.
+        
         let obj = self.objects.get(object.idx)?;
+        let components = obj.components.iter().copied().collect_vec();
 
         #[allow(clippy::unwrap_used, reason="ObjectID is already confirmed valid.")]
         let parent = self.objects.get_mut(obj.parent.idx).unwrap();
         parent.children.remove(&object);
 
+        #[allow(clippy::unwrap_used, reason="If the code is correct an object's component handles should always be valid.")]
+        components.into_iter().try_for_each(|c| {
+            self.remove_component(c)
+        }).unwrap();
+
         self.objects.remove(object.idx)?;
 
         Ok(())
+    }
+
+    pub fn serialize_object<S: serde::Serializer>(&mut self, object: ObjectID, serializer: S) -> Result<Option<S::Ok>, S::Error> {
+        let Some(object) = serialize::GameObject::new(self, object) else { return Ok(None) };
+
+        Ok(Some(object.serialize(serializer)?))
+    }
+
+    fn deserialize_object_helper(&mut self, object: serialize::GameObject, target: ObjectID) {
+        let Ok(target_obj) = self.objects.get_mut(target.idx) else { return };
+        let serialize::GameObject { name, position, rotation, scale, components, children } = object;
+
+        target_obj.name = name;
+        target_obj.position = position;
+        target_obj.rotation = rotation;
+        target_obj.scale = scale;
+
+        let old_components = target_obj.components.iter().copied().collect_vec();
+        #[allow(clippy::unwrap_used, reason="If the code is correct an object's component handles should always be valid.")]
+        old_components.into_iter().try_for_each(|c| {
+            self.remove_component(c)
+        }).unwrap();
+
+        for component in components {
+            let DeserializedType::Component(component) = dyn_deserialize(component).unwrap() else { unreachable!() };
+
+            self.add_component_any(target, component).unwrap();
+        }
+
+        for child in children {
+            let new_target = self.create_game_object(child.name.clone(), target).unwrap();
+            self.deserialize_object_helper(child, new_target);
+        }
+    }
+
+    pub fn deserialize_object<'de, D: serde::Deserializer<'de>>(&mut self, target: ObjectID, deserializer: D) -> Result<Option<()>, D::Error> {
+        if !self.objects.contains(target.idx) { return Ok(None) }
+
+        let object = serialize::GameObject::deserialize(deserializer)?;
+
+        self.deserialize_object_helper(object, target);
+
+        Ok(Some(()))
     }
 
     pub(in crate::engine) fn get_removed_components(&mut self) -> Vec<(ObjectID, ComponentRef)> {
@@ -401,16 +463,9 @@ impl World {
     }
 }
 
-// fn obj_error(error: crate::engine::data_structures::error::Error) -> ObjectError {
-//     match error {
-//         crate::engine::data_structures::error::Error::ElementRemovedError => DeadObject {}.into(),
-//         crate::engine::data_structures::error::Error::IndexPointerMismatchError => WorldMismatch { other: "" }.into(),
-//     }
-// }
+#[derive(Serialize, Default)]
+struct RootComponent {
+    main_camera: Option<Camera>
+}
 
-// fn comp_error(error: crate::engine::data_structures::error::Error) -> ComponentError {
-//     match error {
-//         crate::engine::data_structures::error::Error::ElementRemovedError => DeadComponent {}.into(),
-//         crate::engine::data_structures::error::Error::IndexPointerMismatchError => WorldMismatch { other: "" }.into(),
-//     }
-// }
+impl Component for RootComponent {}
