@@ -1,7 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{ffi::OsStr, path::PathBuf, sync::Arc};
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{Result, Uninitialized}};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
 use derive_serialize::Serialize;
+use itertools::Itertools;
+use resource_packager::packager::read::DirEntry;
 use crate::engine::gl_types::vectors::Vec2;
 
 use image::{ImageError, RgbaImage};
@@ -46,7 +48,7 @@ impl SpriteSheet {
 
 impl Component for SpriteSheet {
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
-        self.resource_handle = Some(engine.resource_manager.load(ImageLoader, &self.resource)?);
+        self.resource_handle = Some(engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), &self.resource)?);
 
         Ok(())
     }
@@ -132,9 +134,9 @@ pub struct AnimatedSprite {
 }
 
 impl AnimatedSprite {
-    pub fn new<S: ToOwned<Owned = String>>(name: S, anchor: Vec2, framerate: f32) -> AnimatedSprite {
-        let name = name.to_owned();
-        AnimatedSprite { name, anchor, current_frame: 0.0, framerate, paused: false, animated_sprite_id: None, total_frames: 0  }
+    pub fn new<S: Into<String>>(name: S, framerate: f32) -> AnimatedSprite {
+        let name = name.into();
+        AnimatedSprite { name, anchor: vec2!(0, 0), current_frame: 0.0, framerate, paused: false, animated_sprite_id: None, total_frames: 0  }
     }
 }
 
@@ -185,40 +187,54 @@ pub struct AnimatedSpriteLoader {
     name: String,
     #[serialized]
     frames_dir: PathBuf,
-    sprite_id: Option<AnimatedSpriteID>
+    sprite_id: Option<AnimatedSpriteID>,
+    resources: Option<Vec<ResourceHandle<RgbaImage, Arc<ImageError>>>>
 }
 
 impl AnimatedSpriteLoader {
     pub fn new<S: Into<String>, P: Into<PathBuf>>(name: S, frames_dir: P) -> AnimatedSpriteLoader {
         let name = name.into();
         let frames_dir = frames_dir.into();
-        AnimatedSpriteLoader { name, frames_dir, sprite_id: None }
+        AnimatedSpriteLoader { name, frames_dir, sprite_id: None, resources: None }
     }
 }
 
 impl Component for AnimatedSpriteLoader {
-    fn init(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        // let AnimatedSpriteLoaderEnum::Uninitialized { name, frames_dir } = self.inner.take() else { unreachable!("init called twice") };
+    fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
+        let resources: Vec<_> = engine.resource_manager.read_dir(&self.frames_dir).into_iter()
+            .filter_map(|entry| match entry { DirEntry::File(path) => Some(path), _ => None })
+            .filter(|path| path.extension().and_then(OsStr::to_str) == Some("png"))
+            .map(|path| engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), path))
+            .try_collect()?;
 
-        // let frames = std::fs::read_dir(frames_dir)?
-        //     .filter_map(|result| result.ok())
-        //     .map(|entry| entry.path())
-        //     .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("png"))
-        //     .map(|path| {
-        //         Ok::<_, ImageError>(image::open(path)?.into_rgba8())
-        //     })
-        //     .try_collect()
-        //     ?;
+        self.resources = Some(resources);
 
-        // self.inner = AnimatedSpriteLoaderEnum::Initialized(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, name, frames)?);
+        Ok(())
+    }
+
+    fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> crate::error::any::Result<()> {
+        if self.sprite_id.is_some() { return Ok(()) }
+
+        let can_take = self.resources.as_ref().is_some_and(|resources| resources.iter().all(|handle| handle.can_take()));
+
+        if !can_take { return Ok(()) }
+
+        let resources = {#[allow(clippy::unwrap_used, reason = "resoures is known to be Some")] self.resources.take().unwrap()};
+
+        let frames: Vec<_> = resources.into_iter().map(|handle| {
+            #[allow(clippy::unwrap_used, reason = "Resource cannot be none if take() was successful.")]
+            Ok(handle.take().ok().try_unwrap()?.unwrap()?)
+        }).try_collect::<_, _, opengl_engine::error::any::Error>()?;
+
+        self.sprite_id = Some(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, self.name.clone(), frames)?);
 
         Ok(())
     }
 
     fn on_remove(&mut self, engine: &mut Engine, _owner: ObjectID) -> crate::error::any::Result<()> {
-        // let AnimatedSpriteLoaderEnum::Initialized(id) = self.inner.take() else { unreachable!("uninitialized.") };
+        let Some(id) = self.sprite_id.take() else { return Ok(()) };
 
-        // engine.sprite_renderer.remove_animated_sprite(&mut engine.gfx, id);
+        engine.sprite_renderer.remove_animated_sprite(&mut engine.gfx, id);
 
         Ok(())
     }

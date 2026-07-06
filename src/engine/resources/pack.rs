@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fs::File, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
 
-use resource_packager::packager::{ResourcePackagerError, read::ResourcePackageReader};
+use resource_packager::packager::{ResourcePackagerError, read::{DirEntry, ResourcePackageReader}};
 
 use crate::error::Result;
 
@@ -73,5 +73,12 @@ impl AssetPack {
         let mut queue = self.load_queue.lock().unwrap();
 
         queue.push_back(LoadCommand { path, before_load, on_load });
+    }
+
+    pub fn read_dir<P: AsRef<Path>>(&self, resource_dir: P) -> Vec<DirEntry> {
+        #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
+        let reader = self.reader.lock().unwrap();
+
+        reader.read_dir(resource_dir).unwrap_or_default()
     }
 }

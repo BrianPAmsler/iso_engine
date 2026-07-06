@@ -1,9 +1,11 @@
+use std::{borrow::Cow, path::{Path, PathBuf}, sync::Arc};
+
 use bytemuck::{Pod, Zeroable};
 use derive_serialize::Serialize;
-use image::{ImageBuffer, Luma};
+use image::{GrayImage, ImageBuffer, ImageError, Luma, RgbImage, RgbaImage};
 use vulkano::{format::Format, image::sampler::Filter, pipeline::graphics::vertex_input::Vertex};
 
-use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}, texture::{Texture, builder::TextureBuilder}}}, error::{OutOfBounds, Result, Uninitialized}};
+use crate::{engine::{game_object::component::Component, graphics::{BufferType, Graphics, PipelineBuilder, PipelineHandle, terrain::{error::{CellAccessError, TerrainFromRawError, UpdateTextureError}, terrain_renderer::{TerrainRenderer, fragment_shader::FragmentUniforms, vertex_shader::VertexUniforms}}, texture::{Texture, builder::TextureBuilder}}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{OutOfBounds, Result, TryUnwrap, Uninitialized}};
 
 const VERTEX_DATA: &[TerrainVertex] = &[
     // [0]: Bottom-Left Corner
@@ -96,43 +98,39 @@ impl<'a> TerrainCellMut<'a> {
     }
 }
 
-enum TerrainInner {
-    Initialized {
-        height_data: Vec<u8>,
-        color_data: Vec<u8>,
-        width: u32,
-        height: u32,
-        height_texture: Texture,
-        color_texture: Texture,
-        pipeline: PipelineHandle,
-        height_dirty: bool,
-        color_dirty: bool
-    },
-    Uninitialized {
-        height_file: String,
-        color_file: String
-    }
-}
-
-impl Default for TerrainInner {
-    fn default() -> Self {
-        Self::Uninitialized { height_file: String::new(), color_file: String::new() }
-    }
+struct TerrainInner {
+    height_data: Vec<u8>,
+    color_data: Vec<u8>,
+    width: u32,
+    height: u32,
+    height_texture: Texture,
+    color_texture: Texture,
+    pipeline: PipelineHandle,
+    height_dirty: bool,
+    color_dirty: bool
 }
 
 #[derive(Serialize)]
-pub struct Terrain(TerrainInner);
+pub struct Terrain {
+    #[serialized]
+    height_file: PathBuf,
+    #[serialized]
+    color_file: PathBuf,
+    data: Option<TerrainInner>,
+    height_handle: Option<ResourceHandle<GrayImage, Arc<ImageError>>>,
+    color_handle: Option<ResourceHandle<RgbaImage, Arc<ImageError>>>,
+}
 
 const ALIGNED_BYTES_PER_COLOR: usize = 4;
 const BYTES_PER_COLOR: usize = 3;
 const COLORS_PER_CELL: usize = 4;
 
 impl Terrain {
-    pub fn new(height_file: &str, color_file: &str) -> Terrain {
-        Terrain(TerrainInner::Uninitialized { height_file: height_file.to_owned(), color_file: color_file.to_owned() })
+    pub fn new<'a, P1: Into<PathBuf>, P2: Into<PathBuf>>(height_file: P1, color_file: P2) -> Terrain {
+        Terrain { height_file: height_file.into(), color_file: color_file.into(), data: None, height_handle: None, color_handle: None }
     } 
 
-    fn from_raw_unchecked(gfx :&mut Graphics, terrain_renderer: &TerrainRenderer, height_data: Vec<u8>, color_data: Vec<u8>, width: u32, height: u32) -> Result<Terrain, TerrainFromRawError> {
+    fn from_raw_unchecked(gfx :&mut Graphics, terrain_renderer: &TerrainRenderer, height_data: Vec<u8>, color_data: Vec<u8>, width: u32, height: u32) -> Result<TerrainInner, TerrainFromRawError> {
         let height_texture = TextureBuilder::from_raw_pixels(height_data.clone(), width + 1, height + 1, Format::R8_UNORM)
             .min_filter(Filter::Nearest)
             .mag_filter(Filter::Nearest)
@@ -156,13 +154,13 @@ impl Terrain {
             .add_texture(4, terrain_renderer.noise_texture().clone())
             .finish()?;
 
-        Ok(Terrain(TerrainInner::Initialized { height_data, color_data, width, height, height_texture, color_texture, pipeline, height_dirty: false, color_dirty: false }))
+        Ok(TerrainInner { height_data, color_data, width, height, height_texture, color_texture, pipeline, height_dirty: false, color_dirty: false })
     }
 
-    fn from_raw(gfx :&mut Graphics, terrain_renderer: &TerrainRenderer, height_data: Vec<u8>, color_data: Vec<u8>, width: u32, height: u32) -> Result<Terrain, TerrainFromRawError> {
+    fn from_raw(gfx :&mut Graphics, terrain_renderer: &TerrainRenderer, height_data: Vec<u8>, color_data: Vec<u8>, width: u32, height: u32) -> Result<TerrainInner, TerrainFromRawError> {
         // Height data is per corner, rather than per cell, so each dimension needs one extra value to represent all corners
         if height_data.len() != ((width + 1) * (height + 1)) as usize {
-            panic!("Height data size does not match given dimensions. ({})", height_data.len());
+            panic!("Height data size does not match given dimensions. ({})", height_data.len()); // TODO: This should be an error, not a panic
         }
 
         if color_data.len() != (width * height) as usize * ALIGNED_BYTES_PER_COLOR * COLORS_PER_CELL {
@@ -173,18 +171,18 @@ impl Terrain {
     }
 
     pub fn get_raw_height(&self) -> Result<&[u8], Uninitialized> {
-        let Self(TerrainInner::Initialized { height_data, .. }) = self else { Err(Uninitialized)? };
+        let Some(TerrainInner { height_data, .. }) = &self.data else { Err(Uninitialized)? };
         Ok(height_data)
     }
 
     pub fn get_raw_colors(&self) -> Result<&[u8], Uninitialized> {
-        let Self(TerrainInner::Initialized { color_data, .. }) = self else { Err(Uninitialized)? };
+        let Some(TerrainInner { color_data, .. }) = &self.data else { Err(Uninitialized)? };
 
         Ok(color_data)
     }
 
     pub fn get_cell_mut<'a>(&'a mut self, x: u32, z: u32) -> Result<TerrainCellMut<'a>, CellAccessError> {
-        let Self(TerrainInner::Initialized { height_data , color_data, width, height, height_dirty, color_dirty, .. }) = self else { return Err(Uninitialized)? };
+        let Some(TerrainInner { height_data , color_data, width, height, height_dirty, color_dirty, .. }) = &mut self.data else { return Err(Uninitialized)? };
         if x >= *width || z >= *height {
             return Err(OutOfBounds { index: (x, z), bounds: (0,0)..(*width, *height)})?;
         }
@@ -231,17 +229,17 @@ impl Terrain {
     }
 
     pub fn width(&self) -> Result<u32, Uninitialized> {
-        let Self(TerrainInner::Initialized { width, .. }) = self else { return Err(Uninitialized)? };
+        let Some(TerrainInner { width, .. }) = &self.data else { return Err(Uninitialized)? };
         Ok(*width)
     }
 
     pub fn height(&self) -> Result<u32, Uninitialized> {
-        let Self(TerrainInner::Initialized { height, .. }) = self else { return Err(Uninitialized)? };
+        let Some(TerrainInner { height, .. }) = &self.data else { return Err(Uninitialized)? };
         Ok(*height)
     }
 
     pub(in crate::engine::graphics::terrain) fn update_textures(&mut self, gfx: &Graphics) -> Result<(), UpdateTextureError> {
-        let Self(TerrainInner::Initialized { height_dirty, height_texture, height_data, color_data, color_dirty, color_texture, .. }) = self else { return Err(Uninitialized)? };
+        let Some(TerrainInner { height_dirty, height_texture, height_data, color_data, color_dirty, color_texture, .. }) = &mut self.data else { return Err(Uninitialized)? };
 
         if *height_dirty {
             // Terrain enforces correct data buffer size, so this is safe
@@ -260,30 +258,38 @@ impl Terrain {
 }
 
 impl Component for Terrain {
-    fn init(&mut self, engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
-        let TerrainInner::Uninitialized { height_file, color_file  } = std::mem::take(&mut self.0) else { Err(Uninitialized)? };
+    fn init(&mut self, engine: &mut crate::engine::Engine, owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
+        self.height_handle = Some(engine.resource_manager.load(ImageLoader::<GrayImage>::new(), &self.height_file)?);
+        self.color_handle = Some(engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), &self.color_file)?);
 
-        let grid = image::ImageReader::open(color_file)?.decode()?;
-        let grid = grid.to_rgba8();
-
-        let height_map = image::ImageReader::open(height_file)?.decode()?;
-        let height_map = height_map.to_rgb8();
-        let (width, height) = height_map.dimensions();
-        let height_map: Vec<u8> = height_map.into_raw().into_iter().step_by(3).collect();
-        #[allow(clippy::unwrap_used, reason="Buffer is created from the original image.")]
-        let height_map: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, height_map).unwrap();
-
-        // Height map uses offset pixel grid, so it ends up being +1 in each dimension.
-        let (width, height) = (width - 1, height - 1);
-
-        *self = Self::from_raw(&mut engine.gfx, &engine.terrain_renderer, height_map.into_raw(), grid.into_raw(), width, height)?;
         Ok(())
     }
 
     fn update(&mut self, engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID, _delta_time: f32) -> crate::error::any::Result<()> {
+        if self.data.is_none() {
+            let can_take = 
+                self.height_handle.as_ref().is_some_and(|handle| handle.can_take())
+                && self.color_handle.as_ref().is_some_and(|handle| handle.can_take());
+
+            if !can_take {
+                return Ok(());
+            }
+
+            let height_handle = {#[allow(clippy::unwrap_used, reason = "Handle is already known to be Some.")] self.height_handle.take().unwrap()};
+            let color_handle = {#[allow(clippy::unwrap_used, reason = "Handle is already known to be Some.")] self.color_handle.take().unwrap()};
+
+            let grid = {#[allow(clippy::unwrap_used, reason = "Resource cannot be none if take() was successful.")] color_handle.take().ok().try_unwrap()?.unwrap()?};
+            let height_map = {#[allow(clippy::unwrap_used, reason = "Resource cannot be none if take() was successful.")] height_handle.take().ok().try_unwrap()?.unwrap()?};
+
+            // Height map uses offset pixel grid, so it ends up being +1 in each dimension.
+            let (width, height) = (height_map.width() - 1, height_map.height() - 1);
+
+            self.data = Some(Self::from_raw(&mut engine.gfx, &engine.terrain_renderer, height_map.into_raw(), grid.into_raw(), width, height)?);
+        }
+
         self.update_textures(&engine.gfx)?;
 
-        let TerrainInner::Initialized { width, height, pipeline, .. } = &self.0 else { Err(Uninitialized)? };
+        let Some(TerrainInner { width, height, pipeline, .. }) = &self.data else { Err(Uninitialized)? };
         engine.terrain_renderer.queue_terrain(*width, *height, *pipeline);
         Ok(())
     }

@@ -667,7 +667,7 @@ impl Graphics {
             viewport,
             window_resized: false,
             recreate_swapchain: false,
-            recreate_command_buffers: false
+            recreate_command_buffers: true
         })
     }
 
@@ -708,7 +708,7 @@ impl Graphics {
             }
         }
 
-        if self.recreate_command_buffers && self.pipelines.count() > 0 {
+        if self.recreate_command_buffers {
             self.recreate_command_buffers = false;
             self.command_buffers = get_command_buffers(
                 &self.command_buffer_allocator,
@@ -728,6 +728,7 @@ impl Graphics {
 
     pub fn draw(&mut self) -> Result<(), DrawError> {
         if self.command_buffers.is_empty() {
+            println!("empty command buffers");
             return Ok(());
         }
 

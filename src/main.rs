@@ -1,12 +1,12 @@
 
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use derive_serialize::Serialize;
-use opengl_engine::engine::gl_types::{geometric::normalize, vectors::{vec2, vec3}};
+use opengl_engine::engine::{gl_types::{geometric::normalize, vectors::{vec2, vec3}}, graphics::{sprite_renderer::components::{AnimatedSprite, AnimatedSpriteLoader}, terrain::Terrain}};
 use regex::Regex;
 
-use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, gl_types::vectors::Vec2, graphics::{Camera, Projection, sprite_renderer::components::{Sprite, SpriteSheet}}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
+use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection, sprite_renderer::components::{Sprite, SpriteSheet}}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
 
 #[derive(Clone, Default, Serialize)]
 pub struct FPSCounter {
@@ -24,6 +24,12 @@ impl FPSCounter {
 }
 
 impl Component for FPSCounter {
+    fn init(&mut self, engine: &mut Engine, _: ObjectID) -> Result<()> {
+        println!("first frame");
+
+        Ok(())
+    }
+    
     fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> Result<()> {
         if engine.input.get_key_state(Key::Escape).press {
             engine.set_should_close(true);
@@ -165,37 +171,36 @@ fn start_game() -> Result<()> {
 
     engine.world.add_component(a, sprite_sheet)?;
 
-    // let animation = AnimatedSpriteLoader::new("test animation", "test frames");
+    let animation = AnimatedSpriteLoader::new("test animation", "assets/test frames");
     
-    // engine.world.add_component(a, animation)?;
+    engine.world.add_component(a, animation)?;
     
     let sprite1 = engine.world.create_game_object("Sprite 1", engine.world.get_root())?;
     let sprite2 = engine.world.create_game_object("Sprite 2", engine.world.get_root())?;
-    // let sprite3 = engine.world.create_game_object("Sprite 3", engine.world.get_root())?;
-    // let sprite4 = engine.world.create_game_object("Sprite 4", engine.world.get_root())?;
+    let sprite3 = engine.world.create_game_object("Sprite 3", engine.world.get_root())?;
+    let sprite4 = engine.world.create_game_object("Sprite 4", engine.world.get_root())?;
 
-    // let mut transform = engine.world.get_transform(sprite3)?;
-    // *transform.position_mut() = vec3!(2, 0, 0);
+    let mut transform = engine.world.get_transform(sprite3)?;
+    *transform.position_mut() = vec3!(2, 0, 0);
 
-    // let mut transform = engine.world.get_transform(sprite4)?;
-    // *transform.position_mut() = vec3!(0, 0, 2);
-    // *transform.scale_mut() = vec3!(2, 2, 2);
+    let mut transform = engine.world.get_transform(sprite4)?;
+    *transform.position_mut() = vec3!(0, 0, 2);
+    *transform.scale_mut() = vec3!(2, 2, 2);
 
     let mut sprite_component1 = Sprite::new("assets/sprite_sheet.png", 0);
     sprite_component1.anchor = vec2!(0.5, 0);
     let mut sprite_component2 = Sprite::new("assets/sprite_sheet.png", 1);
     sprite_component2.anchor = vec2!(0.5, 0);
-    // let mut sprite_component3 = AnimatedSprite::new("test animation", 60.0);
-    // sprite_component3.anchor = vec2!(0.5, 0);
-    // let mut sprite_component4 = AnimatedSprite::new("test animation", 60.0);
-    // sprite_component4.anchor = vec2!(0.5, 0);
-    // sprite_component4.current_frame = 15.0;
-    // sprite_component4.interpolate = true;
+    let mut sprite_component3 = AnimatedSprite::new("test animation", 60.0);
+    sprite_component3.anchor = vec2!(0.5, 0);
+    let mut sprite_component4 = AnimatedSprite::new("test animation", 60.0);
+    sprite_component4.anchor = vec2!(0.5, 0);
+    sprite_component4.current_frame = 15.0;
 
     engine.world.add_component(sprite1, sprite_component1)?;
     engine.world.add_component(sprite2, sprite_component2)?;
-    // engine.world.add_component(sprite3, sprite_component3)?;
-    // engine.world.add_component(sprite4, sprite_component4)?;
+    engine.world.add_component(sprite3, sprite_component3)?;
+    engine.world.add_component(sprite4, sprite_component4)?;
     
     let camera = Camera::new(
         Projection::Orthographic {
@@ -211,14 +216,15 @@ fn start_game() -> Result<()> {
 
     engine.world.set_main_camera(camera);
 
-    // let terrain = Terrain::new("height_map.png", "ground.png");
-    // engine.world.add_component(a, terrain)?;
+    let terrain = Terrain::new("assets/height_map.png", "assets/ground.png");
+    engine.world.add_component(a, terrain)?;
 
     let renderer = Renderer { camera_size: 10.0, sprite1: None, sprite2: None  };
 
     engine.world.add_component(a, FPSCounter::default())?;
     engine.world.add_component(a, renderer)?;
 
+    println!("run called");
     engine.run()?;
 
     Ok(())
@@ -231,6 +237,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::unwrap_used, reason="Regex is valid.")]
 pub fn clean_backtrace(error: &Error, crate_name: &'static str) -> String {
     let str = format!("{:?}", error.backtrace());
 

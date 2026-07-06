@@ -1,7 +1,7 @@
 use std::{any::Any, collections::HashMap, io::ErrorKind::NotFound, marker::PhantomData, path::{Path, PathBuf}, sync::{Arc, OnceLock, RwLock, Weak}};
 
 use itertools::Itertools;
-use resource_packager::packager::ResourcePackagerError;
+use resource_packager::packager::{ResourcePackagerError, read::DirEntry};
 
 use crate::{engine::resources::{error::{InvalidDowncast, LoadError, ResourceError, ResourceLoadError}, pack::AssetPack}, error::Result};
 
@@ -210,6 +210,25 @@ impl ResourceManager {
         Self { asset_packs: HashMap::new(), resources: HashMap::new() }
     }
 
+    pub fn read_dir<P: AsRef<Path>>(&self, resource_dir: P) -> Vec<DirEntry> {
+        let (asset_pack_path, resource): (PathBuf, PathBuf) = resource_dir.as_ref().components()
+            .enumerate()
+            .partition_map(|(i, component)| if i == 0 { itertools::Either::Left(component) } else { itertools::Either::Right(component) });
+
+        let asset_pack_string = asset_pack_path.to_string_lossy().into_owned();
+
+        let Some(asset_pack) = self.asset_packs.get(&asset_pack_string) else { return Vec::new() };
+        asset_pack.read_dir(resource).into_iter().map(|mut entry| {
+            match &mut entry {
+                DirEntry::File(path_buf) | DirEntry::Directory(path_buf)=> {
+                    let new_path = asset_pack_path.join(&path_buf);
+                    *path_buf = new_path;
+                }
+            }
+            entry
+        }).collect_vec()
+    }
+
     pub fn load<T: Send + Sync +'static, E: std::error::Error + Send + Sync + 'static + Clone, L: ResourceLoader<T, E> + 'static, P: AsRef<Path>>(&mut self, loader: L, resource: P) -> Result<ResourceHandle<T, E>, ResourceError> {
         let handle = self.resources.get(resource.as_ref())
             .and_then(ResourceHandleWeak::upgrade)
@@ -226,7 +245,7 @@ impl ResourceManager {
                     .enumerate()
                     .partition_map(|(i, component)| if i == 0 { itertools::Either::Left(component) } else { itertools::Either::Right(component) });
                 
-                let asset_pack_name = asset_pack.to_string_lossy().to_string();
+                let asset_pack_name = asset_pack.to_string_lossy().into_owned();
 
                 if !self.asset_packs.contains_key(&asset_pack_name) {
                     let path = asset_pack.with_added_extension("pack");

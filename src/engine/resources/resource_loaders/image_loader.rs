@@ -1,13 +1,25 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
-use image::{ImageError, RgbaImage};
+use image::{DynamicImage, ImageError};
 
 use crate::engine::resources::ResourceLoader;
 
-pub struct ImageLoader;
+pub struct ImageLoader<T>(PhantomData<T>) where DynamicImage: Into<T>;
 
-impl ResourceLoader<RgbaImage, Arc<image::ImageError>> for ImageLoader {
-    fn load(self, data: Box<[u8]>) -> Result<RgbaImage, Arc<ImageError>> {
-        Ok(image::load_from_memory(&data).map_err(Arc::new)?.into_rgba8())
+impl<T> ImageLoader<T>
+where
+    DynamicImage: Into<T>
+{
+    pub fn new() -> ImageLoader<T> {
+        ImageLoader(PhantomData)
+    }
+}
+
+impl<T: Send + Sync> ResourceLoader<T, Arc<image::ImageError>> for ImageLoader<T>
+where
+    DynamicImage: Into<T>
+{
+    fn load(self, data: Box<[u8]>) -> Result<T, Arc<ImageError>> {
+        Ok(image::load_from_memory(&data).map_err(Arc::new)?.into())
     }
 }
