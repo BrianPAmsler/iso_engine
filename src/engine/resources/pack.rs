@@ -69,6 +69,7 @@ impl AssetPack {
         let path = path.into();
         let before_load = Box::new(before_load);
         let on_load = Box::new(on_load);
+        #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
         let mut queue = self.load_queue.lock().unwrap();
 
         queue.push_back(LoadCommand { path, before_load, on_load });

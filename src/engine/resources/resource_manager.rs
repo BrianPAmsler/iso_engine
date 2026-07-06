@@ -68,6 +68,7 @@ impl<T, E: std::error::Error + Clone + 'static> ResourceHandle<T, E> {
 
     pub fn take(self) -> std::result::Result<Option<std::result::Result<T, ResourceLoadError<E>>>, Self> {
         if Arc::strong_count(&self.data) > 1 { return Err(self) };
+        #[allow(clippy::unwrap_used, reason="Strong count is already confirmed to be 1.")]
         let inner = Arc::into_inner(self.data).unwrap();
         let result = inner.into_inner()
             .map(|result| {
@@ -237,10 +238,12 @@ impl ResourceManager {
                     self.asset_packs.insert(asset_pack_name.clone(), asset_pack);
                 }
 
+                #[allow(clippy::unwrap_used, reason="Key already checked.")]
                 let asset_pack = self.asset_packs.get(&asset_pack_name).unwrap().clone();
 
                 let before_load = {
                     let handle = clone_handle(&handle);
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
                     move || {
                         *handle.status.write().unwrap() = ResourceStatus::Loading;
                     }
@@ -259,8 +262,10 @@ impl ResourceManager {
                         Ok(_) => ResourceStatus::Loaded,
                         Err(_) => ResourceStatus::Error,
                     };
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
                     handle.data.set(result).unwrap();
-                    *handle.status.write().unwrap() = status;
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
+                    {*handle.status.write().unwrap() = status;}
                 };
                 asset_pack.load_resource(resource, before_load, on_load);
             }

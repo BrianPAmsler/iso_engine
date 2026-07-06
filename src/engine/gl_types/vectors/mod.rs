@@ -9,6 +9,7 @@ pub use vec4::*;
 
 use crate::engine::gl_types::{Make, gl_types::inner_matrix::InnerMatrix};
 
+#[allow(private_bounds, reason="InnerMatrix and Make are not intended to be used outside the gl_types module.")]
 pub trait VecN<const N: usize>: InnerMatrix<N, 1> + Make<Matrix<f32, Const<N>, Const<1>, ArrayStorage<f32, N, 1>>> + AsRef<Self> {
     fn as_array(self) -> [f32; N];
     fn from_array(array: [f32; N]) -> Self;

@@ -144,7 +144,7 @@ macro_rules! vector_arithmetic {
             type Output = $t;
         
             fn sub(self, rhs: $t) -> Self::Output {
-                rhs + self
+                rhs - self
             }
         });
         
@@ -152,7 +152,7 @@ macro_rules! vector_arithmetic {
             type Output = $t;
         
             fn mul(self, rhs: $t) -> Self::Output {
-                rhs + self
+                rhs * self
             }
         });
     };
@@ -252,7 +252,7 @@ macro_rules! matrix_arithmetic {
             type Output = $t;
         
             fn sub(self, rhs: $t) -> Self::Output {
-                rhs + self
+                rhs - self
             }
         });
         
@@ -260,7 +260,7 @@ macro_rules! matrix_arithmetic {
             type Output = $t;
         
             fn mul(self, rhs: $t) -> Self::Output {
-                rhs + self
+                rhs * self
             }
         });
     };

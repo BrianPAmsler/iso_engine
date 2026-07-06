@@ -32,7 +32,7 @@ vector_arithmetic!(Vec3);
 impl Seal for Vec3 {}
 
 pub trait Vec3Constructor<T>: Seal {
-    fn new(args: T) -> Vec3;
+    fn new(args: T) -> Self;
 }
 
 impl<A: GLScalar, B: GLScalar, C: GLScalar> Vec3Constructor<(A, B, C)> for Vec3 {

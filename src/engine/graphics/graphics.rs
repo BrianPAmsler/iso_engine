@@ -5,10 +5,6 @@ use vulkano::{Validated, VulkanError, VulkanLibrary, buffer::{Buffer, BufferCont
 use winit::{event_loop::EventLoop, window::Window};
 use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{texture::Texture, error::{BufferImageError, DescriptorSetError, DrawError, GetBindingError, GetCommandBuffersError, GetFramebuffersError, GetPipelineError, GetRenderPassError, InvalidBinding, InvalidEntryPoint, InvalidPipelineHandle, NewGraphicsError, NoLayout, NoPhysicalDevices, SRGBUnsupported, SetIndirectBufferError, UpdatePipelinesError}}}, error::Result};
 
-unsafe fn exit<T> (status: i32) -> T {
-    std::process::exit(status)
-}
-
 #[repr(C, align(16))]
 #[derive(Debug, Default, BufferContents, Clone, Copy, PartialEq)]
 pub struct AlignedVec2(pub [u32; 2]);
@@ -354,7 +350,7 @@ pub struct Graphics {
     device: Arc<Device>,
     queue: Arc<Queue>,
     swapchain: Arc<Swapchain>,
-    images: Vec<Arc<Image>>,
+    // images: Vec<Arc<Image>>, // It might be necessary to hold these
     render_pass: Arc<RenderPass>,
     framebuffers: Vec<Arc<Framebuffer>>,
     pipelines: VecAllocator<PipelineCell>,
@@ -449,6 +445,7 @@ fn get_pipeline(device: &Arc<Device>, vertex_buffer_description: VertexBufferDes
             .into_pipeline_layout_create_info(device.clone())?,
     )?;
 
+    #[allow(clippy::unwrap_used, reason="Subpass 0 should exist.")]
     let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
     Ok(GraphicsPipeline::new(
@@ -519,29 +516,29 @@ fn get_command_buffers(command_buffer_allocator: &Arc<StandardCommandBufferAlloc
                 CommandBufferUsage::MultipleSubmit,
             )?;
 
-            unsafe { 
-                builder
-                    .begin_render_pass(
-                        RenderPassBeginInfo {
-                            clear_values: vec![Some([0.75, 0.75, 0.75, 1.0].into()), Some(ClearValue::Depth(0.0))],
-                            ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
-                        },
-                        SubpassBeginInfo {
-                            contents: SubpassContents::Inline,
-                            ..Default::default()
-                        },
-                    )?;
+            builder
+                .begin_render_pass(
+                    RenderPassBeginInfo {
+                        clear_values: vec![Some([0.75, 0.75, 0.75, 1.0].into()), Some(ClearValue::Depth(0.0))],
+                        ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
+                    },
+                    SubpassBeginInfo {
+                        contents: SubpassContents::Inline,
+                        ..Default::default()
+                    },
+                )?;
 
-                pipelines.iter().try_fold(&mut builder, |builder, (_, pipeline)| {
-                    let PipelineCell { pipeline, vertex_buffer, index_buffer, indirect_buffer, descriptor_set, .. } = pipeline;
-                    builder
-                        .bind_pipeline_graphics((*pipeline).clone())?
-                        .bind_vertex_buffers(0, Subbuffer::new(vertex_buffer.clone()))?
-                        .bind_index_buffer(Subbuffer::new(index_buffer.clone()).cast_aligned::<u32>())?
-                        .bind_descriptor_sets(PipelineBindPoint::Graphics, pipeline.layout().clone(), 0, vec![descriptor_set.clone()])?
-                        .draw_indexed_indirect(indirect_buffer.clone())
-                })?;
-            }
+            pipelines.iter().try_fold(&mut builder, |builder, (_, pipeline)| {
+                let PipelineCell { pipeline, vertex_buffer, index_buffer, indirect_buffer, descriptor_set, .. } = pipeline;
+                let builder = builder
+                    .bind_pipeline_graphics((*pipeline).clone())?
+                    .bind_vertex_buffers(0, Subbuffer::new(vertex_buffer.clone()))?
+                    .bind_index_buffer(Subbuffer::new(index_buffer.clone()).cast_aligned::<u32>())?
+                    .bind_descriptor_sets(PipelineBindPoint::Graphics, pipeline.layout().clone(), 0, vec![descriptor_set.clone()])?;
+
+                #[allow(unsafe_code, reason="I believe I am using this correctly, so it should be safe.")]
+                unsafe { builder.draw_indexed_indirect(indirect_buffer.clone()) }
+            })?;
             builder
                 .end_render_pass(SubpassEndInfo::default())?;
 
@@ -611,12 +608,12 @@ impl Graphics {
             },
         )?;
 
-        let queue = queues.next().unwrap();
+        #[allow(clippy::expect_used, reason="If there is no queue the program should crash.")]
+        let queue = queues.next().expect("No device queue.");
 
         let caps = physical_device
             .surface_capabilities(&surface, Default::default())?;
         
-        let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
         let image_format =  physical_device
             .surface_formats(&surface, Default::default())?
             .into_iter()
@@ -635,7 +632,7 @@ impl Graphics {
                 image_format,
                 image_extent: dimensions.into(),
                 image_usage: ImageUsage::COLOR_ATTACHMENT, // What the images are going to be used for
-                composite_alpha,
+                composite_alpha: swapchain::CompositeAlpha::Opaque,
                 ..Default::default()
             },
         )?;
@@ -659,7 +656,7 @@ impl Graphics {
             device,
             queue,
             swapchain,
-            images,
+            // images,
             render_pass,
             memory_allocator,
             framebuffers: frame_buffers,

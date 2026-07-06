@@ -9,6 +9,7 @@ use nalgebra::{ArrayStorage, Const, Matrix};
 
 use crate::engine::gl_types::{inner_matrix::InnerMatrix, Make};
 
+#[allow(private_bounds, reason="InnerMatrix and Make are not intended to be used outside the gl_types module.")]
 pub trait MatN<const N: usize>: InnerMatrix<N, N> + Make<Matrix<f32, Const<N>, Const<N>, ArrayStorage<f32, N, N>>> + AsRef<Self> {
     fn as_array(self) -> [[f32; N]; N];
     fn from_array(array: [[f32; N]; N]) -> Self;

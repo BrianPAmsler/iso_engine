@@ -1,6 +1,6 @@
-use std::{path::{Path, PathBuf}, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{DynamicMessageErorr, MessageErorr, Result, TryUnwrap as _, Uninitialized}};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader}}, error::{Result, Uninitialized}};
 use derive_serialize::Serialize;
 use crate::engine::gl_types::vectors::Vec2;
 
@@ -54,9 +54,10 @@ impl Component for SpriteSheet {
     fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> crate::error::any::Result<()> {
         let Some(resource) = self.resource_handle.take_if(|resource| resource.can_take()) else { return Ok(()) };
 
+        #[allow(clippy::unwrap_used, reason="Resource can_take() checked.")]
         let Some(result) = resource.take().ok().unwrap() else { return Ok(()) };
         let image = result?;
-        engine.sprite_renderer.add_sprite_sheet(self.resource.to_str().unwrap(), &mut engine.gfx, 1024, image, &self.sprite_definitions)?;
+        engine.sprite_renderer.add_sprite_sheet(self.resource.to_string_lossy(), &mut engine.gfx, 1024, image, &self.sprite_definitions)?;
 
         Ok(())
     }
@@ -146,7 +147,8 @@ impl Component for AnimatedSprite {
             };
             self.animated_sprite_id = Some(id);
             
-            self.total_frames = engine.sprite_renderer.get_total_frames(id).unwrap();
+            #[allow(clippy::unwrap_used, reason="id must be valid here.")]
+            {self.total_frames = engine.sprite_renderer.get_total_frames(id).unwrap();}
         }
 
         let Some(id) = self.animated_sprite_id else { unreachable!() };

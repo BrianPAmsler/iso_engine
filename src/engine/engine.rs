@@ -115,6 +115,7 @@ impl ApplicationHandler for Engine {
                     return;
                 }
 
+                #[allow(clippy::unwrap_used, reason="Any errors that are not handled by this point should crash the program.")]
                 self.update().unwrap();
 
                 self.window.request_redraw();
@@ -218,7 +219,7 @@ impl Engine {
         }
 
         for (owner, component) in self.world.get_removed_components() {
-            #[allow(clippy::unwrap_used, reason="Rc should never leak, if it does crashing is justified.")]
+            #[allow(clippy::expect_used, reason="Rc should never leak, if it does crashing is justified.")]
             let mut component = Rc::into_inner(component).expect("Cannot remove component due to Rc leak.").into_inner();
             let result = component.on_remove(self, owner);
             self.log_error(result);

@@ -307,6 +307,7 @@ impl SpriteSheetBuilder {
         let mut q = VecDeque::new();
         q.push_back(root);
         while !q.is_empty() {
+            #[allow(clippy::unwrap_used, reason="Queue is verified not empty.")]
             let mut node = q.pop_front().unwrap();
 
             if let Some(ImageCell { img, name }) = node.img.take() {
@@ -378,6 +379,7 @@ mod tests {
 
     #[test]
     #[ignore="output must be manually verified"]
+    #[allow(clippy::unwrap_used, reason="test")]
     fn spritesheet_build() {
         let dir = std::fs::read_dir(pathbuf!("test_files", "input", "test_sprites")).unwrap();
         let mut files = Vec::new();

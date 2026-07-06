@@ -61,3 +61,6 @@ allow_attributes_without_reason = "forbid"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
+
+[lints]
+workspace = true

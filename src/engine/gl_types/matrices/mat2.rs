@@ -29,8 +29,9 @@ matrix_arithmetic!(Mat2);
 
 impl Seal for Mat2 {}
 
+// #[allow(clippy::new_ret_no_self, reason="")]
 pub trait Mat2Constructor<T>: Seal {
-    fn new(args: T) -> Mat2;
+    fn new(args: T) -> Self;
 }
 
 impl<A: GLScalar> Mat2Constructor<A> for Mat2 {

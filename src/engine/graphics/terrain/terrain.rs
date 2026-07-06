@@ -189,8 +189,8 @@ impl Terrain {
             return Err(OutOfBounds { index: (x, z), bounds: (0,0)..(*width, *height)})?;
         }
 
-        // All of these point to different elements of the array, so this should be fine.
-        // Using slice.split_at_mut to do the same thing was way too complicated
+        #[allow(unsafe_code, reason="All of these point to different elements of the array, so this should be fine. Using slice.split_at_mut to do the same thing was way too complicated.")]
+        #[allow(clippy::unwrap_used, reason="Slice is made with correct length, so unwrap will never fail.")]
         unsafe {
             let ptr = color_data[..].as_mut_ptr();
             let i = (x * 2 + z * *width * 4) as usize * ALIGNED_BYTES_PER_COLOR; // spooky numbers
@@ -270,6 +270,7 @@ impl Component for Terrain {
         let height_map = height_map.to_rgb8();
         let (width, height) = height_map.dimensions();
         let height_map: Vec<u8> = height_map.into_raw().into_iter().step_by(3).collect();
+        #[allow(clippy::unwrap_used, reason="Buffer is created from the original image.")]
         let height_map: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, height_map).unwrap();
 
         // Height map uses offset pixel grid, so it ends up being +1 in each dimension.

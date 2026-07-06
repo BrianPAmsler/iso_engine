@@ -6,7 +6,7 @@ pub fn matrix_comp_mult<const N: usize, M: MatN<N>, R: AsRef<M>>(x: R, y: R) -> 
     let a = x.as_ref().get_inner_matrix();
     let b = y.as_ref().get_inner_matrix();
 
-    M::make(a.component_mul(&b))
+    M::make(a.component_mul(b))
 }
 
 pub fn outer_product<const N: usize, V: VecN<N>, M: MatN<N>, R: AsRef<V>>(x: R, y: R) -> M {

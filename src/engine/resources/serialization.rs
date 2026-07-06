@@ -1,5 +1,4 @@
-use std::{any::Any, borrow::Cow, cell::{LazyCell, RefCell}, collections::HashMap, fmt::Debug, marker::PhantomData, ops::Deref, path::PathBuf};
-
+use std::{any::Any, borrow::Cow, cell::{LazyCell, RefCell}, collections::HashMap, fmt::Debug, marker::PhantomData, path::PathBuf};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum FieldValue {
@@ -193,7 +192,7 @@ pub mod hidden {
         FieldValue: ConvertFrom<T>
     {
         fn convert_from(value: &Mutex<T>) -> Self {
-            // If lock is poisoned, program should crash
+            #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
             value.lock().unwrap().deref().convert_into()
         }
     }
@@ -375,86 +374,6 @@ impl Deserializer<dyn CompSer> {
     }
 }
 
-#[derive(Debug, derive_serialize::Serialize)]
-struct TestStruct {
-    pub name: String,
-    pub a: u32,
-    pub b: f32,
-    pub c: i32,
-    pub d: u64,
-    #[serialized]
-    e: f64,
-    #[non_serialized]
-    pub f: i64,
-    g: u128
-}
-
-#[derive(Debug, derive_serialize::Serialize)]
-struct TestStruct2 {
-    pub name: String,
-    pub a: u32,
-    pub b: f32,
-    pub c: i32,
-    pub d: u64,
-    #[serialized]
-    e: f64,
-    #[non_serialized]
-    pub f: i64,
-    g: u128
-}
-
-impl Component for TestStruct {
-    fn init(&mut self, _engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
-        println!("{:?}", self);
-        Ok(())
-    }
-}
-
-#[test]
-fn dyn_test() -> Result<(), crate::error::any::Error> {
-    use std::io::Read;
-    // These values never actually get used, so for the sake of the test it's fine.
-    // Creating a valid Engine instance in a test is more trouble than it's worth.
-    let mut engine = unsafe { std::mem::transmute::<[u8; std::mem::size_of::<crate::engine::Engine>()], crate::engine::Engine>([0u8; _]) };
-    let owner = unsafe { std::mem::zeroed() };
-
-    register_serializable_types!(TestStruct, TestStruct2);
-
-    TYPE_DICT.with(|type_dict| println!("{:?}", type_dict.borrow().deref()));
-
-    let mut test_struct: Box<dyn CompSer> = Box::new(TestStruct {
-        name: "Test".to_owned(),
-        a: 1,
-        b: 2.0,
-        c: 3,
-        d: 4,
-        e: 5.0,
-        f: 6,
-        g: 7
-    });
-
-    let mut stdout = shh::stdout()?;
-    test_struct.init(&mut engine, owner)?;
-    let mut output = String::new();
-    stdout.read_to_string(&mut output)?;
-
-    assert_eq!(&output, "TestStruct { name: \"Test\", a: 1, b: 2.0, c: 3, d: 4, e: 5.0, f: 6, g: 7 }\n");
-
-    let serialized = test_struct.serialize();
-    let DeserializedType::Component(mut deserialized) = dyn_deserialize(serialized)? else { panic!("Not component") };
-
-    deserialized.init(&mut engine, owner)?;
-    let mut output = String::new();
-    stdout.read_to_string(&mut output)?;
-
-    assert_eq!(&output, "TestStruct { name: \"Test\", a: 1, b: 2.0, c: 3, d: 4, e: 5.0, f: 0, g: 0 }\n");
-
-    // Engine is not valid, so stop destructor to prevent UB
-    std::mem::forget(engine);
-
-    Ok(())
-}
-
 thread_local! {
     static TYPE_DICT: LazyCell<RefCell<HashMap<&'static str, DeserializerEnum>>> = LazyCell::new(|| RefCell::new(HashMap::new()));
 }
@@ -499,9 +418,8 @@ macro_rules! register_serializable_types {
 pub use register_serializable_types;
 
 use derive_serialize::Serialize;
-use serde::de;
 
-use crate::engine::{game_object::component::Component, resources::serialization::error::{DeserializeError, IncorrectFields, UnknownType}};
+use crate::engine::{game_object::component::Component, resources::serialization::error::{DeserializeError, UnknownType}};
 
 pub mod error {
     use error::{Error, union};
@@ -524,4 +442,96 @@ pub mod error {
     pub struct NoConstructor;
 
     union!(IncorrectFields, UnknownType, IncorrectType as DeserializeError);
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Deref;
+    use std::io::Read;
+
+    use crate::{engine::{game_object::component::Component, resources::serialization::{CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}}};
+
+    #[derive(Debug, derive_serialize::Serialize)]
+    #[allow(unused, reason="test")]
+    struct TestStruct {
+        pub name: String,
+        pub a: u32,
+        pub b: f32,
+        pub c: i32,
+        pub d: u64,
+        #[serialized]
+        e: f64,
+        #[non_serialized]
+        pub f: i64,
+        g: u128
+    }
+
+    #[derive(Debug, derive_serialize::Serialize)]
+    #[allow(unused, reason="test")]
+    struct TestStruct2 {
+        pub name: String,
+        pub a: u32,
+        pub b: f32,
+        pub c: i32,
+        pub d: u64,
+        #[serialized]
+        e: f64,
+        #[non_serialized]
+        pub f: i64,
+        g: u128
+    }
+
+    impl Component for TestStruct {
+        fn init(&mut self, _engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
+            println!("{:?}", self);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn dyn_test() -> Result<(), crate::error::any::Error> {
+        
+        #[allow(unsafe_code, reason="These values never actually get used, so for the sake of the test it's fine. Creating a valid Engine instance in a test is more trouble than it's worth.")]
+        let mut engine = unsafe { std::mem::transmute::<[u8; std::mem::size_of::<crate::engine::Engine>()], crate::engine::Engine>([0u8; _]) };
+        #[allow(unsafe_code, reason="See above.")]
+        let owner = unsafe { std::mem::zeroed() };
+
+        register_serializable_types!(TestStruct, TestStruct2);
+
+        // TODO: Assert instead of print
+        TYPE_DICT.with(|type_dict| println!("{:?}", type_dict.borrow().deref()));
+
+        let mut test_struct: Box<dyn CompSer> = Box::new(TestStruct {
+            name: "Test".to_owned(),
+            a: 1,
+            b: 2.0,
+            c: 3,
+            d: 4,
+            e: 5.0,
+            f: 6,
+            g: 7
+        });
+
+        let mut stdout = shh::stdout()?;
+        test_struct.init(&mut engine, owner)?;
+        let mut output = String::new();
+        stdout.read_to_string(&mut output)?;
+
+        assert_eq!(&output, "TestStruct { name: \"Test\", a: 1, b: 2.0, c: 3, d: 4, e: 5.0, f: 6, g: 7 }\n");
+
+        let serialized = test_struct.serialize();
+        let DeserializedType::Component(mut deserialized) = dyn_deserialize(serialized)? else { panic!("Not component") };
+
+        deserialized.init(&mut engine, owner)?;
+        let mut output = String::new();
+        stdout.read_to_string(&mut output)?;
+
+        assert_eq!(&output, "TestStruct { name: \"Test\", a: 1, b: 2.0, c: 3, d: 4, e: 5.0, f: 0, g: 0 }\n");
+
+        // Engine is not valid, so stop destructor to prevent UB
+        std::mem::forget(engine);
+
+        Ok(())
+    }
 }

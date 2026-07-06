@@ -315,6 +315,7 @@ impl<T> Iterator for IntoIter<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.vec.is_empty() {
+            #[allow(clippy::unwrap_used, reason="Emptiness is checked.")]
             match self.vec.pop_front().unwrap() {
                 Slot::Element { value, .. } => {
                     return Some(value);
@@ -340,6 +341,7 @@ impl<T> IntoIterator for VecAllocator<T> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, reason="test")]
 mod tests {
 
     use rand::RngExt;

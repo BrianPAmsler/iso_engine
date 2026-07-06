@@ -67,13 +67,15 @@ pub mod error {
     }
 }
 
+type ComponentRef = Rc<RefCell<Box<dyn Component>>>;
+
 pub struct World {
     pub(in crate::engine::game_object) root: ObjectID,
     pub(in crate::engine::game_object) objects: VecAllocator<GameObject>,
-    pub(in crate::engine::game_object) components: VecAllocator<Rc<RefCell<Box<dyn Component>>>>, // TODO: rethink component storage
+    pub(in crate::engine::game_object) components: VecAllocator<ComponentRef>, // TODO: rethink component storage
     ordered_components: BTreeMap<i32, HashSet<ComponentID>>,
     uninitialized_components: BTreeMap<i32, HashSet<ComponentID>>,
-    removed_comonents: Vec<(ObjectID, Rc<RefCell<Box<dyn Component>>>)>,
+    removed_comonents: Vec<(ObjectID, ComponentRef)>,
     main_camera: Option<Camera>
 }
 
@@ -117,7 +119,7 @@ impl World {
             let owner = component.owner;
             let rc = engine.world.components.get(component.index)?;
 
-            Ok::<(ObjectID, Rc<RefCell<Box<dyn Component>>>), Error<ComponentError>>((owner, rc.clone()))
+            Ok::<(ObjectID, ComponentRef), Error<ComponentError>>((owner, rc.clone()))
         })
         .partition_map(|result| match result {
             Ok(component) => Left(component),
@@ -146,7 +148,7 @@ impl World {
             let owner = component.owner;
             let rc = engine.world.components.get(component.index)?;
 
-            Ok::<(ObjectID, Rc<RefCell<Box<dyn Component>>>), Error<ComponentError>>((owner, rc.clone()))
+            Ok::<(ObjectID, ComponentRef), Error<ComponentError>>((owner, rc.clone()))
         })
         .partition_map(|result| match result {
             Ok(component) => Left(component),
@@ -175,7 +177,7 @@ impl World {
             let owner = component.owner;
             let rc = engine.world.components.get(component.index)?;
 
-            Ok::<(ObjectID, Rc<RefCell<Box<dyn Component>>>), Error<ComponentError>>((owner, rc.clone()))
+            Ok::<(ObjectID, ComponentRef), Error<ComponentError>>((owner, rc.clone()))
         })
         .partition_map(|result| match result {
             Ok(component) => Left(component),
@@ -361,9 +363,11 @@ impl World {
         // update child parent -> update previous parent's children -> update new parent's children
         obj.parent = parent;
 
-        let prev_parent = self.objects.get_mut(prev_parent.idx).unwrap(); // This should already be valid so unwrap
+        #[allow(clippy::unwrap_used, reason="ObjectID is already confirmed valid.")]
+        let prev_parent = self.objects.get_mut(prev_parent.idx).unwrap();
         prev_parent.children.remove(&object);
 
+        #[allow(clippy::unwrap_used, reason="ObjectID is already confirmed valid.")]
         let new_parent = self.objects.get_mut(parent.idx).unwrap();
         new_parent.children.insert(object);
 
@@ -383,7 +387,8 @@ impl World {
     pub fn destroy(&mut self, object: ObjectID) -> Result<(), ObjectError> {
         let obj = self.objects.get(object.idx)?;
 
-        let parent = self.objects.get_mut(obj.parent.idx).unwrap(); // This should already be valid so unwrap
+        #[allow(clippy::unwrap_used, reason="ObjectID is already confirmed valid.")]
+        let parent = self.objects.get_mut(obj.parent.idx).unwrap();
         parent.children.remove(&object);
 
         self.objects.remove(object.idx)?;
@@ -391,7 +396,7 @@ impl World {
         Ok(())
     }
 
-    pub(in crate::engine) fn get_removed_components(&mut self) -> Vec<(ObjectID, Rc<RefCell<Box<dyn Component>>>)> {
+    pub(in crate::engine) fn get_removed_components(&mut self) -> Vec<(ObjectID, ComponentRef)> {
         std::mem::take(&mut self.removed_comonents)
     }
 }

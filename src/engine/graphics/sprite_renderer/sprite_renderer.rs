@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use bytemuck::{Pod, Zeroable};
 use derive_serialize::Serialize;
 use crate::{engine::{gl_types::vectors::{vec2, vec4}, graphics::sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}}, error::Result};
 use crate::engine::gl_types::{matrices::{Mat4, MatN}, vectors::{Vec2, Vec3, VecN}};
-use image::{DynamicImage, RgbaImage};
+use image::{RgbaImage};
 use itertools::Itertools;
 use vulkano::{buffer::{BufferContents, Subbuffer}, padded::Padded};
 use vulkano::command_buffer::DrawIndexedIndirectCommand;
@@ -70,10 +70,6 @@ pub struct SpriteData {
     pub sprite_id: u32
 }
 
-unsafe fn as_u8_slice<T>(slice: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(slice.as_ptr() as *const u8, std::mem::size_of_val(slice))
-}
-
 struct SpriteSheet {
     name: String,
     render_queue: Vec<GLSpriteStruct>,
@@ -124,10 +120,6 @@ pub struct SpriteDefinition {
     pub height: u32
 }
 
-#[repr(C, align(16))]
-#[derive(BufferContents)]
-struct UnsizedArray<T> ([T]);
-
 #[repr(C)]
 #[derive(BufferContents)]
 struct SpriteSSBO {
@@ -172,9 +164,10 @@ impl SpriteRenderer {
         SpriteRenderer { sprite_sheets: VecAllocator::new(), animated_sprites: VecAllocator::new(), sprite_sheet_index: HashMap::new(), animated_sprite_index: HashMap::new() }
     }
 
-    pub fn add_sprite_sheet(&mut self, name: &str, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: RgbaImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
-        if self.sprite_sheet_index.contains_key(name) {
-            Err(UnknownSpriteSheet { sheet: name.to_owned() })?; 
+    pub fn add_sprite_sheet<'a, S: Into<Cow<'a, str>>>(&mut self, name: S, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: RgbaImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
+        let name = name.into().into_owned();
+        if self.sprite_sheet_index.contains_key(& *name) {
+            return Err(UnknownSpriteSheet { sheet: name })?;
         }
 
         let (sheet_width, sheet_height) = sprite_sheet.dimensions();
@@ -215,7 +208,7 @@ impl SpriteRenderer {
         }
 
         let sprite_sheet = SpriteSheet {
-            name: name.to_owned(),
+            name: name.clone(),
             render_queue: Vec::new(),
             buffersize: initial_buffer_size,
             pipeline,
@@ -224,7 +217,7 @@ impl SpriteRenderer {
         };
 
         let id = self.sprite_sheets.insert(sprite_sheet);
-        self.sprite_sheet_index.insert(name.to_owned(), id);
+        self.sprite_sheet_index.insert(name, id);
 
         Ok(SpriteSheetID(id))
     }

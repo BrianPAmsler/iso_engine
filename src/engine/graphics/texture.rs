@@ -21,15 +21,15 @@ impl Texture {
         gfx.buffer_to_image(image_data, &self.image)
     }
 
-    pub(in crate::engine::graphics) fn image(&self) -> &Arc<Image> {
+    pub fn image(&self) -> &Arc<Image> {
         &self.image
     }
 
-    pub(in crate::engine::graphics) fn view(&self) -> &Arc<ImageView> {
+    pub fn view(&self) -> &Arc<ImageView> {
         &self.view
     }
 
-    pub(in crate::engine::graphics) fn sampler(&self) -> &Arc<Sampler> {
+    pub fn sampler(&self) -> &Arc<Sampler> {
         &self.sampler
     }
 

@@ -1,18 +1,7 @@
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote, quote_spanned};
-use syn::{Attribute, DataEnum, DataStruct, DataUnion, DeriveInput, Generics, Ident, Index, LitInt, Token, Type, Visibility, parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned};
-
-struct TypeList {
-    types: Punctuated<Type, Token![,]>
-}
-
-impl Parse for TypeList {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let ctor = input.parse_terminated(Type::parse, Token![,])?;
-        Ok(TypeList { types: ctor })
-    }
-}
+use syn::{Attribute, DataEnum, DataStruct, DeriveInput, Generics, Ident, Index, LitInt, Type, Visibility, parse_macro_input, spanned::Spanned};
 
 macro_rules! unwrap_syn_error {
     ($err:expr) => {
@@ -23,7 +12,7 @@ macro_rules! unwrap_syn_error {
     };
 }
 
-fn derive_struct(attrs: Vec<Attribute>, vis: Visibility, ident: Ident, generics: Generics, data: DataStruct) -> proc_macro::TokenStream {
+fn derive_struct(_attrs: Vec<Attribute>, _vis: Visibility, ident: Ident, generics: Generics, data: DataStruct) -> proc_macro::TokenStream {
     let crate_path = quote! { ::opengl_engine::engine::resources::serialization };
 
     let fields: Result<Vec<(TokenStream, Type, bool)>, syn::Error> = data.fields.into_iter().enumerate().map(|(i, field)| {
@@ -109,6 +98,7 @@ fn derive_struct(attrs: Vec<Attribute>, vis: Visibility, ident: Ident, generics:
 }
 
 fn derive_enum(attrs: Vec<Attribute>, vis: Visibility, ident: Ident, generics: Generics, data: DataEnum) -> proc_macro::TokenStream {
+    let _ = (attrs, vis, ident, generics, data);
     todo!()
 }
 

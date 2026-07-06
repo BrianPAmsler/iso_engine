@@ -20,6 +20,7 @@ impl Mat3 {
     pub const ZERO: Mat3 = Mat3::_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     pub const IDENTITY: Mat3 = Mat3::_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
 
+    #[allow(clippy::too_many_arguments, reason="Mat3 requires 9 values. Builder pattern or struct parameters do not make sense. Passing an [f32; 9] is less clear.")]
     pub(in crate::engine::gl_types) const fn _new(m11: f32, m12: f32, m13: f32, m21: f32, m22: f32, m23: f32, m31: f32, m32: f32, m33: f32) -> Self {
         Self(Matrix3::new(m11, m12, m13, m21, m22, m23, m31, m32, m33))
     }
@@ -30,7 +31,7 @@ matrix_arithmetic!(Mat3);
 impl Seal for Mat3 {}
 
 pub trait Mat3Constructor<T>: Seal {
-    fn new(args: T) -> Mat3;
+    fn new(args: T) -> Self;
 }
 
 impl<A: GLScalar> Mat3Constructor<A> for Mat3 {
