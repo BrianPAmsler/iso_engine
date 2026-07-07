@@ -1970,6 +1970,7 @@ dependencies = [
  "nalgebra",
  "native-dialog",
  "num",
+ "paste",
  "pathbuf",
  "postcard",
  "quick-xml 0.41.0",

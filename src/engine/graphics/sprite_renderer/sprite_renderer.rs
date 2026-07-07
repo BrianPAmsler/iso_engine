@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use derive_serialize::Serialize;
 use crate::{engine::{gl_types::vectors::{vec2, vec4}, graphics::sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}}, error::Result};
 use crate::engine::gl_types::{matrices::{Mat4, MatN}, vectors::{Vec2, Vec3, VecN}};
-use image::{RgbaImage};
+use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
 use vulkano::{buffer::{BufferContents, Subbuffer}, padded::Padded};
 use vulkano::command_buffer::DrawIndexedIndirectCommand;
@@ -172,7 +172,7 @@ impl SpriteRenderer {
 
         let (sheet_width, sheet_height) = sprite_sheet.dimensions();
         
-        let sprite_sheet = TextureBuilder::from_image(sprite_sheet)
+        let sprite_sheet = TextureBuilder::from_image(sprite_sheet.into(), true)
             .finish(gfx)?;
 
         let vertex_shader = vertex_shader::load(gfx.device())?;

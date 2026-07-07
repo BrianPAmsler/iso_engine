@@ -279,6 +279,11 @@ impl World {
             None => unreachable!(),
         };
 
+        match self.uninitialized_components.get_mut(c.borrow().priority()) {
+            Some(list) => list.remove(&component),
+            None => unreachable!(),
+        };
+
         self.removed_comonents.push((component.owner, c));
 
         Ok(())

@@ -1,7 +1,7 @@
 use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, hash::Hash, ops::DerefMut};
 
 use crate::error::Result;
-use image::{RgbaImage, imageops};
+use image::{DynamicImage, RgbaImage, imageops};
 use lazy_static::lazy_static;
 
 use crate::{engine::graphics::{Graphics, texture::{Texture, builder::TextureBuilder}, texture::error::TextureBuilderError}};
@@ -357,7 +357,7 @@ pub struct SpriteSheet {
 
 impl SpriteSheet {
     pub fn as_texture(self, gfx: &Graphics) -> Result<Texture, TextureBuilderError> {
-        TextureBuilder::from_image(self.sheet).finish(gfx)
+        TextureBuilder::from_image(self.sheet.into(), true).finish(gfx)
     }
 
     pub fn image(&self) -> &RgbaImage {

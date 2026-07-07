@@ -782,7 +782,11 @@ impl Graphics {
         Ok(())
     }
 
-    pub fn buffer_to_image(&self, image_data: Vec<u8>, image: &Arc<Image>) -> Result<(), BufferImageError> {
+    pub fn buffer_to_image<T: BufferContents, I>(&self, image_data: I, image: &Arc<Image>) -> Result<(), BufferImageError>
+    where
+        I: IntoIterator<Item = T>,
+        I::IntoIter: ExactSizeIterator
+    {
         let staging_buffer = Buffer::from_iter(
             self.memory_allocator.clone(),
             BufferCreateInfo {
