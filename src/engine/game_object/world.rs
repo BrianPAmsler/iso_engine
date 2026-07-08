@@ -1,4 +1,4 @@
-use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, rc::Rc};
+use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, marker::PhantomData, rc::Rc};
 
 use crate::engine::{game_object::game_object::serialize, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
 use derive_serialize::Serialize;
@@ -75,8 +75,8 @@ pub struct World {
     pub(in crate::engine::game_object) root: ObjectID,
     pub(in crate::engine::game_object) objects: VecAllocator<GameObject>,
     pub(in crate::engine::game_object) components: VecAllocator<ComponentRef>, // TODO: rethink component storage
-    ordered_components: BTreeMap<i32, HashSet<ComponentID>>,
-    uninitialized_components: BTreeMap<i32, HashSet<ComponentID>>,
+    ordered_components: BTreeMap<i32, HashSet<ComponentID<()>>>,
+    uninitialized_components: BTreeMap<i32, HashSet<ComponentID<()>>>,
     removed_comonents: Vec<(ObjectID, ComponentRef)>,
     main_camera: Option<Camera>
 }
@@ -86,11 +86,26 @@ pub struct ObjectID {
     pub(in crate::engine::game_object) idx: AllocationIndex
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub struct ComponentID {
+#[derive(Hash, PartialEq, Eq)]
+pub struct ComponentID<T> {
     pub(in crate::engine::game_object) index: AllocationIndex,
     pub(in crate::engine::game_object) owner: ObjectID,
-    pub(in crate::engine::game_object) type_: TypeId
+    pub(in crate::engine::game_object) type_: TypeId,
+    _pd: PhantomData<T>
+}
+
+impl<T> Copy for ComponentID<T> {}
+impl<T> Clone for ComponentID<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> ComponentID<T> {
+    pub(in crate::engine::game_object) fn transmute<C>(self) -> ComponentID<C> {
+        let Self { index, owner, type_, .. } = self;
+        ComponentID { index, owner, type_, _pd: PhantomData }
+    }
 }
 
 impl World {
@@ -117,8 +132,8 @@ impl World {
 
     fn init(engine: &mut Engine) -> Vec<AnyError> {
         // I really hope the compiler can optimize this nonsense
-        let components: Vec<ComponentID> = engine.world.uninitialized_components.iter().flat_map(|(_, set)| {
-            set.iter().cloned()
+        let components: Vec<ComponentID<_>> = engine.world.uninitialized_components.iter().flat_map(|(_, set)| {
+            set.iter().copied()
         }).collect();
         engine.world.uninitialized_components.clear();
 
@@ -147,8 +162,8 @@ impl World {
         let mut init_errors = Self::init(engine);
 
         // I really hope the compiler can optimize this nonsense
-        let components: Vec<ComponentID> = engine.world.ordered_components.iter().flat_map(|(_, set)| {
-            set.iter().cloned()
+        let components: Vec<ComponentID<_>> = engine.world.ordered_components.iter().flat_map(|(_, set)| {
+            set.iter().copied()
         }).collect();
 
         let (components, errors): (Vec<_>, Vec<_>) = components.into_iter().map(|component| {
@@ -176,8 +191,8 @@ impl World {
 
     pub(in crate::engine) fn fixed_update(engine: &mut Engine, delta_time: f32) -> Vec<AnyError> {
         // I really hope the compiler can optimize this nonsense
-        let components: Vec<ComponentID> = engine.world.ordered_components.iter().flat_map(|(_, set)| {
-            set.iter().cloned()
+        let components: Vec<ComponentID<_>> = engine.world.ordered_components.iter().flat_map(|(_, set)| {
+            set.iter().copied()
         }).collect();
 
         let (components, mut errors): (Vec<_>, Vec<_>) = components.into_iter().map(|component| {
@@ -236,7 +251,7 @@ impl World {
         let owner = object;
         let object = self.objects.get_mut(object.idx)?;
 
-        let id = ComponentID { index, type_: TypeId::of::<C>(), owner };
+        let id = ComponentID { index, type_: TypeId::of::<C>(), owner, _pd: PhantomData };
         object.components.push(id);
 
         let set = self.ordered_components.entry(priority).or_default();
@@ -250,12 +265,12 @@ impl World {
 
     pub fn add_component_any(&mut self, object: ObjectID, component: Box<dyn Component>) -> Result<(), ObjectError> {
         let priority = *component.priority();
-        let type_ = (*component).type_id();
+        let type_ = component.type_id();
         let index = self.components.insert(Rc::new(RefCell::new(component)));
         let owner = object;
         let object = self.objects.get_mut(object.idx)?;
 
-        let id = ComponentID { index, type_, owner };
+        let id = ComponentID { index, type_, owner, _pd: PhantomData };
         object.components.push(id);
 
         let set = self.ordered_components.entry(priority).or_default();
@@ -267,20 +282,20 @@ impl World {
         Ok(())
     }
 
-    pub fn remove_component(&mut self, component: ComponentID) -> Result<(), ComponentError> {
+    pub fn remove_component<C>(&mut self, component: ComponentID<C>) -> Result<(), ComponentError> {
         let c = self.components.remove(component.index)?;
 
         #[allow(clippy::unwrap_used, reason = "If the code is correct, I'm pretty sure it should be impossible a component to exist without a parent.")]
         let owner = self.objects.get_mut(component.owner.idx).unwrap();
-        owner.components.retain(|e| *e != component);
+        owner.components.retain(|e| *e != component.transmute());
 
         match self.ordered_components.get_mut(c.borrow().priority()) {
-            Some(list) => list.remove(&component),
+            Some(list) => list.remove(&component.transmute()),
             None => unreachable!(),
         };
 
         match self.uninitialized_components.get_mut(c.borrow().priority()) {
-            Some(list) => list.remove(&component),
+            Some(list) => list.remove(&component.transmute()),
             None => unreachable!(),
         };
 
@@ -289,7 +304,7 @@ impl World {
         Ok(())
     }
 
-    pub fn borrow_component<'a, C: Component>(&'a self, component: ComponentID) -> Result<Ref<'a, C>, ComponentBorrowError> {
+    pub fn borrow_component<'a, C: Component>(&'a self, component: ComponentID<C>) -> Result<Ref<'a, C>, ComponentBorrowError> {
         let ref_ = self.components.get(component.index)?.borrow();
 
         let downcast = Ref::filter_map(ref_, |t| {
@@ -299,7 +314,7 @@ impl World {
         Ok(downcast)
     }
 
-    pub fn borrow_component_mut<'a, C: Component>(&'a self, component: ComponentID) -> Result<RefMut<'a, C>, ComponentBorrowError> {
+    pub fn borrow_component_mut<'a, C: Component>(&'a self, component: ComponentID<C>) -> Result<RefMut<'a, C>, ComponentBorrowError> {
         let ref_ = self.components.get(component.index)?.borrow_mut();
 
         let downcast = RefMut::filter_map(ref_, |t| {
@@ -321,24 +336,24 @@ impl World {
         Ok(new_obj)
     }
 
-    pub fn get_component<C: Component>(&self, object: ObjectID) -> Result<Option<ComponentID>, ObjectError> {
+    pub fn get_component<C: Component>(&self, object: ObjectID) -> Result<Option<ComponentID<C>>, ObjectError> {
         let obj = self.objects.get(object.idx)?;
 
         for c in obj.components.iter() {
             if c.type_ == TypeId::of::<C>() {
-                return Ok(Some(*c));
+                return Ok(Some(c.transmute()));
             }
         }
 
         Ok(None)
     }
 
-    pub fn get_components<C: Component>(&self, object: ObjectID) -> Result<Box<[ComponentID]>, ObjectError> {
+    pub fn get_components<C: Component>(&self, object: ObjectID) -> Result<Box<[ComponentID<C>]>, ObjectError> {
         let obj = self.objects.get(object.idx)?;
 
         Ok(obj.components.iter().filter_map(|c| {
             if c.type_ == TypeId::of::<C>() {
-                Some(c.to_owned())
+                Some(c.transmute())
             } else {
                 None
             }
@@ -390,7 +405,7 @@ impl World {
         Ok(())
     }
 
-    pub fn get_owner(&self, component: ComponentID) -> ObjectID {
+    pub fn get_owner<C>(&self, component: ComponentID<C>) -> ObjectID {
         component.owner
     }
 

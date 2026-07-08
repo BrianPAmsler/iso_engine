@@ -41,7 +41,7 @@ pub(in crate::engine) struct GameObject {
     pub position: Vec3,
     pub rotation: Vec3,
     pub scale: Vec3,
-    pub components: Vec<ComponentID>,
+    pub components: Vec<ComponentID<()>>,
     pub children: HashSet<ObjectID>
 }
 
