@@ -1,7 +1,7 @@
 use std::{collections::{BTreeSet, HashMap, VecDeque}, fmt::Debug, hash::Hash, ops::DerefMut};
 
 use crate::error::Result;
-use image::{DynamicImage, RgbaImage, imageops};
+use image::{RgbaImage, imageops};
 use lazy_static::lazy_static;
 
 use crate::{engine::graphics::{Graphics, texture::{Texture, builder::TextureBuilder}, texture::error::TextureBuilderError}};

@@ -1,12 +1,10 @@
-use std::{ffi::OsStr, path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::{sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, texture::Texture}, resources::{ResourceHandle, resource_loaders::{ImageLoader, TextureArrayLoader, TextureLoader, error::{TextureArrayLoadError, TextureLoadError}}, serialization::AsSerialize}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::{sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, texture::Texture}, resources::{ResourceHandle, resource_loaders::{TextureArrayLoader, TextureLoader, error::{TextureArrayLoadError, TextureLoadError}}}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
 use derive_serialize::Serialize;
-use itertools::Itertools;
-use resource_packager::packager::read::DirEntry;
 use crate::engine::gl_types::vectors::Vec2;
 
-use image::{ImageError, RgbaImage};
+use image::RgbaImage;
 
 use super::SpriteData;
 

@@ -471,7 +471,7 @@ mod tests {
     use std::ops::Deref;
     use std::io::Read;
 
-    use crate::engine::{game_object::component::Component, resources::serialization::{AsSerialize, CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}};
+    use crate::engine::{game_object::component::Component, resources::serialization::{CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}};
 
     #[derive(Debug, derive_serialize::Serialize)]
     #[allow(unused, reason="test")]

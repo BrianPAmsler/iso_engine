@@ -46,8 +46,7 @@ pub(in crate::engine) struct GameObject {
 }
 
 pub(in crate::engine::game_object) mod serialize {
-
-    use crate::engine::{game_object::{ObjectID, World}, gl_types::vectors::Vec3, resources::serialization::{FieldValue, Serialize, StructRepr}};
+    use crate::engine::{game_object::{ObjectID, World}, gl_types::vectors::Vec3, resources::serialization::{StructRepr}};
 
     
     #[derive(serde::Serialize, serde::Deserialize, Debug)]

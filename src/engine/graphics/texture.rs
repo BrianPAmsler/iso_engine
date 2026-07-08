@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use image::{DynamicImage, GrayImage, Luma, Rgb, Rgb32FImage, RgbImage, Rgba, Rgba32FImage, RgbaImage};
 use vulkano::image::{Image, sampler::Sampler, view::ImageView};
 
 use crate::{engine::graphics::error::BufferImageError, error::Result};
@@ -280,11 +279,15 @@ pub mod builder {
                 1
             };
 
-            let format = match format {
-                Format::R8_UNORM => Format::R8_SRGB,
-                Format::R8G8B8_UNORM => Format::R8G8B8_SRGB,
-                Format::R8G8B8A8_UNORM => Format::R8G8B8A8_SRGB,
-                _ => format
+            let format = if srgb {
+                match format {
+                    Format::R8_UNORM => Format::R8_SRGB,
+                    Format::R8G8B8_UNORM => Format::R8G8B8_SRGB,
+                    Format::R8G8B8A8_UNORM => Format::R8G8B8A8_SRGB,
+                    _ => format
+                }
+            } else {
+                format
             };
 
             let image = Image::new(

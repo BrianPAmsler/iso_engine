@@ -229,11 +229,7 @@ impl<T> VecAllocator<T> {
 
         match &self.vec[element.index] {
             Slot::Element { id, .. } => {
-                if *id != element.id {
-                    false
-                } else {
-                    true
-                }
+                *id == element.id
             },
             Slot::Hole { .. } => false,
         }

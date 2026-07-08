@@ -1,4 +1,4 @@
-use crate::{engine::{Engine, resources::serialization::{AsSerialize, Serialize}}, error::any::Result};
+use crate::{engine::{Engine, resources::serialization::AsSerialize}, error::any::Result};
 use downcast_rs::{Downcast, impl_downcast};
 
 use crate::engine::game_object::ObjectID;

@@ -1,12 +1,12 @@
 
 
-use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter, Read}, sync::Arc};
+use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter}, sync::Arc};
 
 use derive_serialize::Serialize;
-use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::{vec2, vec3}}, graphics::{sprite_renderer::components::{AnimatedSprite, AnimatedSpriteLoader}, terrain::Terrain}, resources::serialization::AsSerialize}, register_serializable_types};
+use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::vec3}, graphics::terrain::Terrain}, register_serializable_types};
 use regex::Regex;
 
-use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection, sprite_renderer::components::{Sprite, SpriteSheet}}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
+use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
 use serde_json::de::IoRead;
 
 #[derive(Clone, Default, Serialize)]

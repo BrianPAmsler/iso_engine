@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, VecDeque}, fs::File, io::BufReader, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
+use std::{collections::{BTreeMap, VecDeque}, fs::File, io::BufReader, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
 
 use itertools::Itertools;
 use resource_packager::packager::{ResourcePackagerError, read::{DirEntry, ResourcePackageReader}};
