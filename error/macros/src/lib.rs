@@ -88,6 +88,10 @@ pub fn create_error(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 &self.source
             }
 
+            pub fn into_inner(self) -> E {
+                self.source
+            }
+
             pub fn backtrace(&self) -> ::opengl_engine::error::backtrace::Backtrace {
                 self.backtrace.borrow().clone()
             }

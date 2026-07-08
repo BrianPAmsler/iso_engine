@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, path::PathBuf, sync::Arc};
 
-use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, resources::{ResourceHandle, resource_loaders::ImageLoader, serialization::AsSerialize}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
+use crate::{engine::{Engine, game_object::{ObjectID, component::Component}, graphics::{sprite_renderer::{AnimatedSpriteID, SpriteDefinition, SpriteSheetID, animated_sprite::AnimatedSpriteData}, texture::Texture}, resources::{ResourceHandle, resource_loaders::{ImageLoader, TextureArrayLoader, TextureLoader, error::{TextureArrayLoadError, TextureLoadError}}, serialization::AsSerialize}}, error::{Result, TryUnwrap, Uninitialized}, vec2};
 use derive_serialize::Serialize;
 use itertools::Itertools;
 use resource_packager::packager::read::DirEntry;
@@ -15,7 +15,7 @@ pub struct SpriteSheet {
     id: Option<SpriteSheetID>,
     #[serialized]
     resource: PathBuf,
-    resource_handle: Option<ResourceHandle<RgbaImage, Arc<ImageError>>>,
+    resource_handle: Option<ResourceHandle<Texture, TextureLoadError>>,
     #[serialized]
     sprite_definitions: Vec<SpriteDefinition>,
     count: usize
@@ -54,7 +54,7 @@ impl SpriteSheet {
 
 impl Component for SpriteSheet {
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
-        self.resource_handle = Some(engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), &self.resource)?);
+        self.resource_handle = Some(engine.resource_manager.load_file(TextureLoader::<RgbaImage>::new(&engine.gfx), &self.resource)?);
 
         Ok(())
     }
@@ -195,26 +195,22 @@ pub struct AnimatedSpriteLoader {
     #[serialized]
     frames_dir: PathBuf,
     sprite_id: Option<AnimatedSpriteID>,
-    resources: Option<Vec<ResourceHandle<RgbaImage, Arc<ImageError>>>>
+    resource: Option<ResourceHandle<Texture, TextureArrayLoadError>>
 }
 
 impl AnimatedSpriteLoader {
     pub fn new<S: Into<String>, P: Into<PathBuf>>(name: S, frames_dir: P) -> AnimatedSpriteLoader {
         let name = name.into();
         let frames_dir = frames_dir.into();
-        AnimatedSpriteLoader { name, frames_dir, sprite_id: None, resources: None }
+        AnimatedSpriteLoader { name, frames_dir, sprite_id: None, resource: None }
     }
 }
 
 impl Component for AnimatedSpriteLoader {
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
-        let resources: Vec<_> = engine.resource_manager.read_dir(&self.frames_dir).into_iter()
-            .filter_map(|entry| match entry { DirEntry::File(path) => Some(path), _ => None })
-            .filter(|path| path.extension().and_then(OsStr::to_str) == Some("png"))
-            .map(|path| engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), path))
-            .try_collect()?;
+        let resource = engine.resource_manager.load_dir(TextureArrayLoader::<RgbaImage>::new(&engine.gfx), &self.frames_dir)?;
 
-        self.resources = Some(resources);
+        self.resource = Some(resource);
 
         Ok(())
     }
@@ -222,16 +218,13 @@ impl Component for AnimatedSpriteLoader {
     fn update(&mut self, engine: &mut Engine, _: ObjectID, _: f32) -> crate::error::any::Result<()> {
         if self.sprite_id.is_some() { return Ok(()) }
 
-        let can_take = self.resources.as_ref().is_some_and(|resources| resources.iter().all(|handle| handle.can_take()));
+        let can_take = self.resource.as_ref().is_some_and(ResourceHandle::can_take);
 
         if !can_take { return Ok(()) }
 
-        let resources = {#[allow(clippy::unwrap_used, reason = "resoures is known to be Some")] self.resources.take().unwrap()};
+        let resource = {#[allow(clippy::unwrap_used, reason = "resoures is known to be Some")] self.resource.take().unwrap()};
 
-        let frames: Vec<_> = resources.into_iter().map(|handle| {
-            #[allow(clippy::unwrap_used, reason = "Resource cannot be none if take() was successful.")]
-            Ok(handle.take().ok().try_unwrap()?.unwrap()?)
-        }).try_collect::<_, _, opengl_engine::error::any::Error>()?;
+        let frames = resource.take().ok().try_unwrap()?.try_unwrap()??;
 
         self.sprite_id = Some(engine.sprite_renderer.add_animated_sprite(&mut engine.gfx, self.name.clone(), frames)?);
 

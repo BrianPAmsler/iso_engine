@@ -15,6 +15,15 @@ where
     }
 }
 
+impl<T> Default for ImageLoader<T>
+where
+    DynamicImage: Into<T>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Send + Sync> ResourceLoader<T, Arc<image::ImageError>> for ImageLoader<T>
 where
     DynamicImage: Into<T>

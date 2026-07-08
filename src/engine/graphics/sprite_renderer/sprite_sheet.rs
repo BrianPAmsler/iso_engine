@@ -357,7 +357,8 @@ pub struct SpriteSheet {
 
 impl SpriteSheet {
     pub fn as_texture(self, gfx: &Graphics) -> Result<Texture, TextureBuilderError> {
-        TextureBuilder::from_image(self.sheet.into(), true).finish(gfx)
+        #[allow(clippy::unwrap_used, reason = "Image format is rgba.")]
+        TextureBuilder::new(self.sheet.into()).unwrap().finish(gfx)
     }
 
     pub fn image(&self) -> &RgbaImage {

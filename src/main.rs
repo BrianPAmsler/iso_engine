@@ -161,6 +161,21 @@ impl Component for Renderer {
             *sprite.position_mut() += vec3!(0, -1, 0) * delta_time * speed;
         }
 
+        if engine.input.get_key_state(Key::KeyT).press {
+            let terrain = engine.world.find_child(engine.world.get_root(), "a")?.try_unwrap()?;
+            let terrain = engine.world.get_component::<Terrain>(terrain)?.try_unwrap()?;
+            let mut terrain = engine.world.borrow_component_mut::<Terrain>(terrain)?;
+
+            println!("before: {:?}", &terrain.get_raw_colors()?[0..30]);
+            let mut cell = terrain.get_cell_mut(0, 0)?;
+            *cell.bottom_left().color() = [255, 0, 0];
+            *cell.bottom_right().color() = [0, 255, 0];
+            *cell.top_left().color() = [0, 0, 255];
+            *cell.top_right().color() = [255, 255, 255];
+
+            println!("update terrain: {:?}", &terrain.get_raw_colors()?[0..30]);
+        }
+
         let Some(camera) = engine.world.get_main_camera_mut() else { return Ok(()) };
         self.camera_size -= engine.input.get_scroll_y() as f32;
 

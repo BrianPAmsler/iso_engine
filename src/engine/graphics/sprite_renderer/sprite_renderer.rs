@@ -2,15 +2,14 @@ use std::{borrow::Cow, collections::HashMap};
 
 use bytemuck::{Pod, Zeroable};
 use derive_serialize::Serialize;
-use crate::{engine::{gl_types::vectors::{vec2, vec4}, graphics::sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}}, error::Result};
+use crate::{engine::{gl_types::vectors::{vec2, vec4}, graphics::{sprite_renderer::{animated_sprite::{AnimatedSprite, AnimatedSpriteData}, error::AddAnimatedSpriteError}, texture::Texture}}, error::Result};
 use crate::engine::gl_types::{matrices::{Mat4, MatN}, vectors::{Vec2, Vec3, VecN}};
-use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
 use vulkano::{buffer::{BufferContents, Subbuffer}, padded::Padded};
 use vulkano::command_buffer::DrawIndexedIndirectCommand;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 
-use crate::{engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{AlignedVec3, Binding, BufferType, Graphics, PipelineBuilder, PipelineHandle, texture::builder::TextureBuilder, sprite_renderer::error::{AddSpritesheetError, SpriteRendererBufferError, SpriteRendererUpdateError, UnknownSpriteSheet}}}};
+use crate::engine::{data_structures::{AllocationIndex, VecAllocator}, graphics::{AlignedVec3, Binding, BufferType, Graphics, PipelineBuilder, PipelineHandle, sprite_renderer::error::{AddSpritesheetError, SpriteRendererBufferError, SpriteRendererUpdateError, UnknownSpriteSheet}}};
 
 const UNIFORMS_BINDING: u32 = 1;
 const SPRITE_SHEET_BINDING: u32 = 2;
@@ -164,16 +163,11 @@ impl SpriteRenderer {
         SpriteRenderer { sprite_sheets: VecAllocator::new(), animated_sprites: VecAllocator::new(), sprite_sheet_index: HashMap::new(), animated_sprite_index: HashMap::new() }
     }
 
-    pub fn add_sprite_sheet<'a, S: Into<Cow<'a, str>>>(&mut self, name: S, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: RgbaImage, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
+    pub fn add_sprite_sheet<'a, S: Into<Cow<'a, str>>>(&mut self, name: S, gfx: &mut Graphics, initial_buffer_size: usize, sprite_sheet: Texture, sprite_map: &[SpriteDefinition]) -> Result<SpriteSheetID, AddSpritesheetError> {
         let name = name.into().into_owned();
         if self.sprite_sheet_index.contains_key(& *name) {
             return Err(UnknownSpriteSheet { sheet: name })?;
         }
-
-        let (sheet_width, sheet_height) = sprite_sheet.dimensions();
-        
-        let sprite_sheet = TextureBuilder::from_image(sprite_sheet.into(), true)
-            .finish(gfx)?;
 
         let vertex_shader = vertex_shader::load(gfx.device())?;
         let fragment_shader = fragment_shader::load(gfx.device())?;
@@ -181,7 +175,7 @@ impl SpriteRenderer {
         let sprite_map = sprite_map.iter().map(|sprite| {
             let SpriteDefinition { x, y, width, height } = *sprite;
             // Convert pixel coordinates to uv coordinates
-            let wh = vec2!(sheet_width, sheet_height);
+            let wh = vec2!(sprite_sheet.width(), sprite_sheet.height());
             vec4!(x, y, width, height) / vec4!(wh, wh)
         })
         .map(|vec| Vec4Aligned(vec.as_array()))
@@ -191,7 +185,7 @@ impl SpriteRenderer {
             .vertex_shader(vertex_shader)
             .fragment_shader(fragment_shader)
             .vertex_data(VERTEX_DATA.to_owned(), INDEX_DATA.to_owned())?
-            .add_texture(0, sprite_sheet)
+            .add_texture(0, sprite_sheet.clone())
             .add_uniform_buffer(UNIFORMS_BINDING, InputData::default(), BufferType::Dynamic)?
             .add_storage_buffer_unsized::<SpriteSSBO>(SPRITE_SHEET_BINDING, initial_buffer_size as u64, BufferType::Dynamic)?
             .add_storage_buffer_unsized::<SpriteSheetSSBO>(SPRITE_MAP_BINDING, sprite_map.len() as u64, BufferType::Static)?
@@ -212,8 +206,8 @@ impl SpriteRenderer {
             render_queue: Vec::new(),
             buffersize: initial_buffer_size,
             pipeline,
-            width: sheet_width,
-            height: sheet_height
+            width: sprite_sheet.width(),
+            height: sprite_sheet.height()
         };
 
         let id = self.sprite_sheets.insert(sprite_sheet);
@@ -222,11 +216,8 @@ impl SpriteRenderer {
         Ok(SpriteSheetID(id))
     }
 
-    pub fn add_animated_sprite(&mut self, gfx: &mut Graphics, name: String, frames: Vec<RgbaImage>) -> Result<AnimatedSpriteID, AddAnimatedSpriteError> {
-        let texture = TextureBuilder::from_frames(frames)?
-            .finish(& *gfx)?;
-
-        let sprite = AnimatedSprite::new(gfx, texture, name.clone())?;
+    pub fn add_animated_sprite(&mut self, gfx: &mut Graphics, name: String, texture_array: Texture) -> Result<AnimatedSpriteID, AddAnimatedSpriteError> {
+        let sprite = AnimatedSprite::new(gfx, texture_array, name.clone())?;
 
         let id = self.animated_sprites.insert(sprite);
         self.animated_sprite_index.insert(name, id);

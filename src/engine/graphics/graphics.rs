@@ -782,43 +782,12 @@ impl Graphics {
         Ok(())
     }
 
-    pub fn buffer_to_image<T: BufferContents, I>(&self, image_data: I, image: &Arc<Image>) -> Result<(), BufferImageError>
+    pub fn buffer_to_image<T: BufferContents, I>(&self, image_data: I, image: Arc<Image>) -> Result<(), BufferImageError>
     where
         I: IntoIterator<Item = T>,
         I::IntoIter: ExactSizeIterator
     {
-        let staging_buffer = Buffer::from_iter(
-            self.memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: vulkano::buffer::BufferUsage::TRANSFER_SRC,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            image_data,
-        )?;
-        
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.command_buffer_allocator.clone(),
-            self.queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )?;
-
-        builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
-            staging_buffer.clone(),
-            image.clone(),
-        ))?;
-
-        let command_buffer = builder.build()?;
-        let future = vulkano::sync::now(self.device.clone())
-            .then_execute(self.queue.clone(), command_buffer)?
-            .then_signal_fence_and_flush()?;
-
-        future.wait(None)?;
-
-        Ok(())
+        buffer_to_image(self.memory_allocator.clone(), self.command_buffer_allocator.clone(), self.queue.clone(), self.device.clone(), image_data, image)
     }
 
     pub fn get_binding(&self, pipeline: PipelineHandle, binding: u32) -> Result<Binding, GetBindingError> {
@@ -858,4 +827,43 @@ impl Graphics {
     pub fn viewport(&self) -> Viewport {
         self.viewport.clone()
     }
+}
+
+pub fn buffer_to_image<T: BufferContents, I>(memory_allocator: Arc<StandardMemoryAllocator>, command_buffer_allocator: Arc<StandardCommandBufferAllocator>, queue: Arc<Queue>, device: Arc<Device>, image_data: I, image: Arc<Image>) -> Result<(), BufferImageError>
+where
+    I: IntoIterator<Item = T>,
+    I::IntoIter: ExactSizeIterator
+{
+    let staging_buffer = Buffer::from_iter(
+        memory_allocator,
+        BufferCreateInfo {
+            usage: vulkano::buffer::BufferUsage::TRANSFER_SRC,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        },
+        image_data,
+    )?;
+    
+    let mut builder = AutoCommandBufferBuilder::primary(
+        command_buffer_allocator,
+        queue.queue_family_index(),
+        CommandBufferUsage::OneTimeSubmit,
+    )?;
+
+    builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
+        staging_buffer,
+        image,
+    ))?;
+
+    let command_buffer = builder.build()?;
+    let future = vulkano::sync::now(device)
+        .then_execute(queue, command_buffer)?
+        .then_signal_fence_and_flush()?;
+
+    future.wait(None)?;
+
+    Ok(())
 }

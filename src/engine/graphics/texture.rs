@@ -19,7 +19,8 @@ pub struct Texture {
 
 impl Texture {
     pub fn update_texture(&self, gfx: &Graphics, image_data: Vec<u8>) -> Result<(), BufferImageError> {
-        gfx.buffer_to_image(image_data, &self.image)
+        println!("texture updated");
+        gfx.buffer_to_image(image_data, self.image.clone())
     }
 
     pub fn image(&self) -> &Arc<Image> {
@@ -47,129 +48,15 @@ impl Texture {
     }
 }
 
-enum ImageContainer {
-    /// Each pixel in this image is 8-bit Luma
-    ImageLuma8(GrayImage),
-
-    /// Each pixel in this image is 8-bit Rgb
-    ImageRgb8(RgbImage),
-
-    /// Each pixel in this image is 8-bit Rgb with alpha
-    ImageRgba8(RgbaImage),
-
-    /// Each pixel in this image is 16-bit Luma
-    ImageLuma16(image::ImageBuffer<Luma<u16>, Vec<u16>>),
-
-    /// Each pixel in this image is 16-bit Rgb
-    ImageRgb16(image::ImageBuffer<Rgb<u16>, Vec<u16>>),
-
-    /// Each pixel in this image is 16-bit Rgb with alpha
-    ImageRgba16(image::ImageBuffer<Rgba<u16>, Vec<u16>>),
-
-    /// Each pixel in this image is 32-bit float Rgb
-    ImageRgb32F(Rgb32FImage),
-
-    /// Each pixel in this image is 32-bit float Rgb with alpha
-    ImageRgba32F(Rgba32FImage),
-}
-
-impl From<GrayImage> for ImageContainer {
-    fn from(value: GrayImage) -> Self {
-        Self::ImageLuma8(value)
-    }
-}
-
-impl From<RgbImage> for ImageContainer {
-    fn from(value: RgbImage) -> Self {
-        Self::ImageRgb8(value)
-    }    
-}
-
-impl From<RgbaImage> for ImageContainer {
-    fn from(value: RgbaImage) -> Self {
-        Self::ImageRgba8(value)
-    }    
-}
-
-impl From<image::ImageBuffer<Luma<u16>, Vec<u16>>> for ImageContainer {
-    fn from(value: image::ImageBuffer<Luma<u16>, Vec<u16>>) -> Self {
-        Self::ImageLuma16(value)
-    }    
-}
-
-impl From<image::ImageBuffer<Rgb<u16>, Vec<u16>>> for ImageContainer {
-    fn from(value: image::ImageBuffer<Rgb<u16>, Vec<u16>>) -> Self {
-        Self::ImageRgb16(value)
-    }    
-}
-
-impl From<image::ImageBuffer<Rgba<u16>, Vec<u16>>> for ImageContainer {
-    fn from(value: image::ImageBuffer<Rgba<u16>, Vec<u16>>) -> Self {
-        Self::ImageRgba16(value)
-    }    
-}
-
-impl From<Rgb32FImage> for ImageContainer {
-    fn from(value: Rgb32FImage) -> Self {
-        Self::ImageRgb32F(value)
-    }    
-}
-
-impl From<Rgba32FImage> for ImageContainer {
-    fn from(value: Rgba32FImage) -> Self {
-        Self::ImageRgba32F(value)
-    }    
-}
-
-impl TryFrom<DynamicImage> for ImageContainer {
-    type Error = DynamicImage;
-    fn try_from(value: DynamicImage) -> std::result::Result<Self, Self::Error> {
-        Ok(match value {
-            DynamicImage::ImageLuma8(image_buffer) => Self::ImageLuma8(image_buffer),
-            DynamicImage::ImageRgb8(image_buffer) => Self::ImageRgb8(image_buffer),
-            DynamicImage::ImageRgba8(image_buffer) => Self::ImageRgba8(image_buffer),
-            DynamicImage::ImageLuma16(image_buffer) => Self::ImageLuma16(image_buffer),
-            DynamicImage::ImageRgb16(image_buffer) => Self::ImageRgb16(image_buffer),
-            DynamicImage::ImageRgba16(image_buffer) => Self::ImageRgba16(image_buffer),
-            DynamicImage::ImageRgb32F(image_buffer) => Self::ImageRgb32F(image_buffer),
-            DynamicImage::ImageRgba32F(image_buffer) => Self::ImageRgba32F(image_buffer),
-            _ => {
-                return Err(value);
-            }, 
-        })
-    }
-}
-
 pub mod builder {
-    use image::{DynamicImage, RgbaImage};
+    use std::sync::Arc;
+
+    use image::{DynamicImage};
     use itertools::Itertools;
-    use num::Zero;
     use paste::paste;
-    use vulkano::{format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::ImageView}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}};
+    use vulkano::{command_buffer::allocator::StandardCommandBufferAllocator, device::{Device, Queue}, format::Format, image::{Image, ImageCreateInfo, ImageType, ImageUsage, sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode}, view::ImageView}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}};
 
-    use crate::{engine::graphics::{Graphics, texture::{ImageContainer, Texture, error::{InvalidFrameDimensions, TextureBuilderError}}}, error::Result};
-
-    fn pad_pixels<T: Copy + Zero>(pixels: Vec<T>, size: usize, align: usize, fill: T) -> Vec<T> {
-        assert!(size > 0);
-        assert!(align >= size);
-        if size == align { return pixels }
-
-        let len = (pixels.len() / size) * align;
-        let padding = vec![fill; align - size];
-        let mut out = vec![T::zero(); len];
-
-        pixels.chunks(size).enumerate().for_each(|(i, chunk)| {
-            let offset = i * align;
-
-            let pixels = &mut out[offset..offset + size];
-            pixels.copy_from_slice(chunk);
-
-            let pad = &mut out[offset + size..offset + align];
-            pad.copy_from_slice(&padding[..]);
-        });
-
-        out
-    }
+    use crate::{engine::graphics::{self, Graphics, texture::{Texture, error::{InvalidFormat, InvalidFrameDimensions, NewTextureArrayError, TextureBuilderError, UnsupportedImageFormat}}}, error::Result};
 
     macro_rules! data_enum {
         ($($type:ident),*) => {
@@ -197,6 +84,7 @@ pub mod builder {
         height: u32,
         depth: u32,
         format: Format,
+        srgb: bool,
         wrap_s: SamplerAddressMode,
         wrap_t: SamplerAddressMode,
         min_filter: Filter,
@@ -204,45 +92,53 @@ pub mod builder {
         image_type: ImageType,
     }
 
+    fn into_data(image: DynamicImage) -> std::result::Result<(Data, Format), UnsupportedImageFormat> {
+        let image = match image {
+            DynamicImage::ImageLuma8(_) => image,
+            DynamicImage::ImageRgb8(_) => image,
+            DynamicImage::ImageRgba8(_) => image,
+            DynamicImage::ImageLuma16(_) => image,
+            DynamicImage::ImageRgb16(_) => image,
+            DynamicImage::ImageRgba16(_) => image,
+            DynamicImage::ImageRgb32F(_) => image,
+            DynamicImage::ImageRgba32F(_) => image,
+            DynamicImage::ImageLumaA8(_) => return Err(UnsupportedImageFormat("ImageLumaA8")),
+            DynamicImage::ImageLumaA16(_) => return Err(UnsupportedImageFormat("ImageLumaA16")),
+            _ => return Err(UnsupportedImageFormat("Unknown")),
+        };
+
+        Ok(match image {
+            DynamicImage::ImageLuma8(image) => (image.into_raw().into(), Format::R8_UNORM),
+            DynamicImage::ImageRgb8(image) => (image.into_raw().into(), Format::R8G8B8_UNORM),
+            DynamicImage::ImageRgba8(image) => (image.into_raw().into(), Format::R8G8B8A8_UNORM),
+            DynamicImage::ImageLuma16(image) => (image.into_raw().into(), Format::R16_UNORM),
+            DynamicImage::ImageRgb16(image) => (image.into_raw().into(), Format::R16G16B16_UNORM),
+            DynamicImage::ImageRgba16(image) => (image.into_raw().into(), Format::R16G16B16A16_UNORM),
+            DynamicImage::ImageRgb32F(image) => (image.into_raw().into(), Format::R32G32B32_SFLOAT),
+            DynamicImage::ImageRgba32F(image) => (image.into_raw().into(), Format::R32G32B32A32_SFLOAT),
+            _ => unreachable!(), 
+        })
+    }
+
     impl TextureBuilder {
-        pub fn from_image(image: DynamicImage, srgb: bool) -> TextureBuilder {
-            let image = match image {
-                DynamicImage::ImageLuma8(_) => image,
-                DynamicImage::ImageRgb8(_) => image,
-                DynamicImage::ImageRgba8(_) => image,
-                DynamicImage::ImageLuma16(_) => image,
-                DynamicImage::ImageRgb16(_) => image,
-                DynamicImage::ImageRgba16(_) => image,
-                DynamicImage::ImageRgb32F(_) => image,
-                DynamicImage::ImageRgba32F(_) => image,
-                _ => image.into_rgba8().into(), 
-            };
-
+        pub fn new(image: DynamicImage) -> Result<TextureBuilder, UnsupportedImageFormat> {
             let (width, height) = (image.width(), image.height());
-            let (data, format) = match (image, srgb) {
-                (DynamicImage::ImageLuma8(image), srgb) => (image.into_raw().into(), match srgb { true => Format::R8_SRGB, false => Format::R8_UNORM}),
-                (DynamicImage::ImageRgb8(image), srgb) => (image.into_raw().into(), match srgb { true => Format::R8G8B8_SRGB, false => Format::R8G8B8_UNORM}),
-                (DynamicImage::ImageRgba8(image), srgb) => (image.into_raw().into(), match srgb { true => Format::R8G8B8A8_SRGB, false => Format::R8G8B8A8_UNORM}),
-                (DynamicImage::ImageLuma16(image), _) => (image.into_raw().into(), Format::R16_UNORM),
-                (DynamicImage::ImageRgb16(image), _) => (image.into_raw().into(), Format::R16G16B16_UNORM),
-                (DynamicImage::ImageRgba16(image), _) => (image.into_raw().into(), Format::R16G16B16A16_UNORM),
-                (DynamicImage::ImageRgb32F(image), _) => (image.into_raw().into(), Format::R32G32B32_SFLOAT),
-                (DynamicImage::ImageRgba32F(image), _) => (image.into_raw().into(), Format::R32G32B32A32_SFLOAT),
-                _ => unreachable!(), 
-            };
 
-            TextureBuilder {
+            let (data, format) = into_data(image)?;
+
+            Ok(TextureBuilder {
                 data,
                 width,
                 height,
                 depth: 1,
                 format,
+                srgb: true,
                 wrap_s: SamplerAddressMode::Repeat,
                 wrap_t: SamplerAddressMode::Repeat,
                 min_filter: Filter::Linear,
                 mag_filter: Filter::Linear,
                 image_type: ImageType::Dim2d
-            }
+            })
         }
 
         pub fn from_raw_pixels(data: Vec<u8>, width: u32, height: u32, format: Format) -> TextureBuilder {
@@ -253,6 +149,7 @@ pub mod builder {
                 height,
                 depth: 1,
                 format,
+                srgb: true,
                 wrap_s: SamplerAddressMode::Repeat,
                 wrap_t: SamplerAddressMode::Repeat,
                 min_filter: Filter::Linear,
@@ -261,33 +158,90 @@ pub mod builder {
             }
         }
 
-        pub fn from_frames(frames: Vec<RgbaImage>) -> Result<TextureBuilder, InvalidFrameDimensions> {
+        pub fn new_array(frames: Vec<DynamicImage>) -> Result<TextureBuilder, NewTextureArrayError> {
             if frames.is_empty() {
                 Err(InvalidFrameDimensions)?;
             }
 
-            let (width, height) = frames[0].dimensions();
-
-            for frame in &frames {
-                if frame.dimensions() != (width, height) {
-                    Err(InvalidFrameDimensions)?;
-                }
-            }
-
+            let width = frames[0].width();
+            let height = frames[0].height();
             let depth = frames.len() as u32;
 
-            let data = frames.into_iter()
-                .flat_map(|frame| frame.into_raw())
-                .collect_vec();
+            let frames = frames.into_iter()
+                .map(into_data)
+                .try_collect::<_, Vec<_>, _>()?;
 
-            let data = Data::U8(data);
+            enum DataType {
+                U8,
+                U16,
+                F32
+            }
+
+            let format = frames[0].1;
+            let data_type = match &frames[0].0 {
+                Data::U8(_) => DataType::U8,
+                Data::U16(_) => DataType::U16,
+                Data::F32(_) => DataType::F32,
+            };
+
+            let data = match data_type {
+                DataType::U8 => {
+                    Data::U8(
+                        frames.into_iter()
+                        .map(|(data, format)| {
+                            match data {
+                                Data::U8(data) => (data, format),
+                                _ => unreachable!()
+                            }
+                        })
+                        .map(|(data, data_format)| if data_format == format { Ok(data) } else { Err(InvalidFormat) })
+                        .try_fold(Vec::new(), |mut prev, next| {
+                            prev.extend(next?.into_iter());
+                            Ok::<_, InvalidFormat>(prev)
+                        })?
+                    )
+                },
+                DataType::U16 => {
+                    Data::U16(
+                        frames.into_iter()
+                        .map(|(data, format)| {
+                            match data {
+                                Data::U16(data) => (data, format),
+                                _ => unreachable!()
+                            }
+                        })
+                        .map(|(data, data_format)| if data_format == format { Ok(data) } else { Err(InvalidFormat) })
+                        .try_fold(Vec::new(), |mut prev, next| {
+                            prev.extend(next?.into_iter());
+                            Ok::<_, InvalidFormat>(prev)
+                        })?
+                    )
+                },
+                DataType::F32 => {
+                    Data::F32(
+                        frames.into_iter()
+                        .map(|(data, format)| {
+                            match data {
+                                Data::F32(data) => (data, format),
+                                _ => unreachable!()
+                            }
+                        })
+                        .map(|(data, data_format)| if data_format == format { Ok(data) } else { Err(InvalidFormat) })
+                        .try_fold(Vec::new(), |mut prev, next| {
+                            prev.extend(next?.into_iter());
+                            Ok::<_, InvalidFormat>(prev)
+                        })?
+                    )
+                },
+            };
 
             Ok(TextureBuilder {
                 data,
                 width,
                 height,
                 depth,
-                format: Format::R8G8B8A8_SRGB,
+                format,
+                srgb: true,
                 wrap_s: SamplerAddressMode::Repeat,
                 wrap_t: SamplerAddressMode::Repeat,
                 min_filter: Filter::Linear,
@@ -316,8 +270,8 @@ pub mod builder {
             self
         }
 
-        pub fn finish(self, gfx: &Graphics) -> Result<Texture, TextureBuilderError> {
-            let Self { data, width, height, depth, format, wrap_s, wrap_t, min_filter, mag_filter, image_type } = self;
+        pub fn finish_no_gfx(self, memory_allocator: Arc<StandardMemoryAllocator>, command_buffer_allocator: Arc<StandardCommandBufferAllocator>, queue: Arc<Queue>, device: Arc<Device>) -> Result<Texture, TextureBuilderError> {
+            let Self { data, width, height, depth, format, srgb, wrap_s, wrap_t, min_filter, mag_filter, image_type } = self;
 
             let array_layers = depth;
             let depth_dim = if image_type == ImageType::Dim3d {
@@ -326,8 +280,15 @@ pub mod builder {
                 1
             };
 
+            let format = match format {
+                Format::R8_UNORM => Format::R8_SRGB,
+                Format::R8G8B8_UNORM => Format::R8G8B8_SRGB,
+                Format::R8G8B8A8_UNORM => Format::R8G8B8A8_SRGB,
+                _ => format
+            };
+
             let image = Image::new(
-                gfx.memory_allocator(),
+                memory_allocator.clone(),
                 ImageCreateInfo {
                     image_type,
                     format,
@@ -343,14 +304,14 @@ pub mod builder {
             )?;
 
             match data {
-                Data::U8(data) => gfx.buffer_to_image(data, &image)?,
-                Data::U16(data) => gfx.buffer_to_image(data, &image)?,
-                Data::F32(data) => gfx.buffer_to_image(data, &image)?
+                Data::U8(data) => graphics::buffer_to_image(memory_allocator, command_buffer_allocator, queue, device.clone(), data, image.clone())?,
+                Data::U16(data) => graphics::buffer_to_image(memory_allocator, command_buffer_allocator, queue, device.clone(), data, image.clone())?,
+                Data::F32(data) => graphics::buffer_to_image(memory_allocator, command_buffer_allocator, queue, device.clone(), data, image.clone())?
             }
             
 
             let sampler = Sampler::new(
-                gfx.device(),
+                device,
                 SamplerCreateInfo {
                     mag_filter,
                     min_filter,
@@ -365,6 +326,10 @@ pub mod builder {
 
             Ok(Texture { image, view, sampler, width, height, depth  })
         }
+
+        pub fn finish(self, gfx: &Graphics) -> Result<Texture, TextureBuilderError> {
+            self.finish_no_gfx(gfx.memory_allocator(), gfx.command_buffer_allocator(), gfx.queue(), gfx.device())
+        }
     }
 }
 
@@ -377,6 +342,16 @@ pub mod error {
     #[error("All frames must have the same dimensions.")]
     pub struct InvalidFrameDimensions;
 
+    #[derive(Error, Debug)]
+    #[error("All frames must have the same format.")]
+    pub struct InvalidFormat;
+
+    #[derive(Error, Debug)]
+    #[error("Unsupported image format: {0}")]
+    pub struct UnsupportedImageFormat(pub &'static str);
+
     // #[allow(clippy::enum_variant_names, reason="Variant are generated from vulkan error names and should not be changed.")]
     union!(#[use_debug] Validated<AllocateImageError>, #[use_debug] Validated<AllocateBufferError>, #[use_debug] Box<ValidationError>, CommandBufferExecError, BufferImageError, #[use_debug] Validated<VulkanError> as TextureBuilderError);
+
+    union!(InvalidFrameDimensions, UnsupportedImageFormat, InvalidFormat as NewTextureArrayError);
 }

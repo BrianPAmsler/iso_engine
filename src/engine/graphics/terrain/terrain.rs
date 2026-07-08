@@ -81,19 +81,21 @@ pub struct TerrainCellMut<'a> {
 }
 
 impl<'a> TerrainCellMut<'a> {
-    pub fn top_left(&'a mut self) -> CellCorner<'a> {
+    // I don't get why I can't do this with two lifetimes.
+    // If I try to use two, it requrires you to re-borrow the cell every time you borrow one of the inner refrences.
+    pub fn top_left<'b, 'c: 'b>(&'c mut self) -> CellCorner<'b> where 'a: 'b {
         CellCorner { height: self.top_left_height, color: self.top_left_color, color_dirty: self.color_changed, height_dirty: self.height_changed }
     }
 
-    pub fn top_right(&'a mut self) -> CellCorner<'a> {
+    pub fn top_right<'b, 'c: 'b>(&'c mut self) -> CellCorner<'b> {
         CellCorner { height: self.top_right_height, color: self.top_right_color, color_dirty: self.color_changed, height_dirty: self.height_changed }
     }
 
-    pub fn bottom_left(&'a mut self) -> CellCorner<'a> {
+    pub fn bottom_left<'b, 'c: 'b>(&'c mut self) -> CellCorner<'b> where 'a: 'b {
         CellCorner { height: self.bottom_left_height, color: self.bottom_left_color, color_dirty: self.color_changed, height_dirty: self.height_changed }
     }
 
-    pub fn bottom_right(&'a mut self) -> CellCorner<'a> {
+    pub fn bottom_right<'b, 'c: 'b>(&'c mut self) -> CellCorner<'b> where 'a: 'b {
         CellCorner { height: self.bottom_right_height, color: self.bottom_right_color, color_dirty: self.color_changed, height_dirty: self.height_changed }
     }
 }
@@ -184,34 +186,38 @@ impl Terrain {
 
     pub fn get_cell_mut<'a>(&'a mut self, x: u32, z: u32) -> Result<TerrainCellMut<'a>, CellAccessError> {
         let Some(TerrainInner { height_data , color_data, width, height, height_dirty, color_dirty, .. }) = &mut self.data else { return Err(Uninitialized)? };
+
         if x >= *width || z >= *height {
             return Err(OutOfBounds { index: (x, z), bounds: (0,0)..(*width, *height)})?;
         }
+
+        // Flip z because images start from the top left, but the terrain starts from the bottom left.
+        let z = *height - z - 1;
 
         #[allow(unsafe_code, reason="All of these point to different elements of the array, so this should be fine. Using slice.split_at_mut to do the same thing was way too complicated.")]
         #[allow(clippy::unwrap_used, reason="Slice is made with correct length, so unwrap will never fail.")]
         unsafe {
             let ptr = color_data[..].as_mut_ptr();
             let i = (x * 2 + z * *width * 4) as usize * ALIGNED_BYTES_PER_COLOR; // spooky numbers
-            let bottom_left_color = (std::slice::from_raw_parts_mut(ptr.add(i), BYTES_PER_COLOR)).try_into().unwrap();
-            let bottom_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
-            let top_left_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2), BYTES_PER_COLOR)).try_into().unwrap();
-            let top_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2 + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
+            let top_left_color = (std::slice::from_raw_parts_mut(ptr.add(i), BYTES_PER_COLOR)).try_into().unwrap();
+            let top_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
+            let bottom_left_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2), BYTES_PER_COLOR)).try_into().unwrap();
+            let bottom_right_color = (std::slice::from_raw_parts_mut(ptr.add(i + *width as usize * ALIGNED_BYTES_PER_COLOR * 2 + ALIGNED_BYTES_PER_COLOR), BYTES_PER_COLOR)).try_into().unwrap();
 
             let height_data_width = *width + 1;
 
             let ptr = height_data[..].as_mut_ptr();
             let i = x + z * height_data_width;
-            let bottom_left_height = &mut *(ptr.add(i as usize));
-
-            let i = (x + 1) + z * height_data_width;
-            let bottom_right_height = &mut *(ptr.add(i as usize));
-
-            let i = x + (z + 1) * height_data_width;
             let top_left_height = &mut *(ptr.add(i as usize));
 
-            let i = (x + 1) + (z + 1) * height_data_width;
+            let i = (x + 1) + z * height_data_width;
             let top_right_height = &mut *(ptr.add(i as usize));
+
+            let i = x + (z + 1) * height_data_width;
+            let bottom_left_height = &mut *(ptr.add(i as usize));
+
+            let i = (x + 1) + (z + 1) * height_data_width;
+            let bottom_right_height = &mut *(ptr.add(i as usize));
             
             Ok(TerrainCellMut {
                 top_left_height,
@@ -260,8 +266,8 @@ impl Terrain {
 
 impl Component for Terrain {
     fn init(&mut self, engine: &mut crate::engine::Engine, _: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
-        self.height_handle = Some(engine.resource_manager.load(ImageLoader::<GrayImage>::new(), &self.height_file)?);
-        self.color_handle = Some(engine.resource_manager.load(ImageLoader::<RgbaImage>::new(), &self.color_file)?);
+        self.height_handle = Some(engine.resource_manager.load_file(ImageLoader::<GrayImage>::new(), &self.height_file)?);
+        self.color_handle = Some(engine.resource_manager.load_file(ImageLoader::<RgbaImage>::new(), &self.color_file)?);
 
         Ok(())
     }

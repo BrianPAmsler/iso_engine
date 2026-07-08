@@ -1,9 +1,9 @@
-use std::{any::Any, collections::HashMap, io::ErrorKind::NotFound, marker::PhantomData, path::{Path, PathBuf}, sync::{Arc, OnceLock, RwLock, Weak}};
+use std::{any::Any, collections::{BTreeMap, HashMap}, io::ErrorKind::NotFound, marker::PhantomData, path::{Path, PathBuf}, sync::{Arc, OnceLock, RwLock, Weak}};
 
 use itertools::Itertools;
 use resource_packager::packager::{ResourcePackagerError, read::DirEntry};
 
-use crate::{engine::resources::{error::{InvalidDowncast, LoadError, ResourceError, ResourceLoadError}, pack::AssetPack}, error::Result};
+use crate::{engine::resources::{error::{_ResourceLoadError, InvalidDowncast, ResourceError, ResourceLoadError}, pack::AssetPack}, error::Result};
 
 #[derive(Debug)]
 pub struct ResourceHandle<T: ?Sized + 'static, E: std::error::Error + ?Sized> {
@@ -15,7 +15,7 @@ pub struct ResourceHandle<T: ?Sized + 'static, E: std::error::Error + ?Sized> {
     _error: PhantomData<E>
 }
 
-impl<T, E: std::error::Error + Clone + 'static> ResourceHandle<T, E> {
+impl<T, E: std::error::Error + 'static> ResourceHandle<T, E> {
     fn new() -> ResourceHandle<T, E>  {
         ResourceHandle {
             data: Arc::new(OnceLock::new()),
@@ -42,11 +42,12 @@ impl<T, E: std::error::Error + Clone + 'static> ResourceHandle<T, E> {
             .map(|result| {
                 result.as_ref()
                     .map_err(|err| {
-                        let err: Option<ResourceLoadError<E>> = err.downcast_and_clone();
+                        let err: Option<&_ResourceLoadError<E>> = err.downcast_ref();
+                        println!("downcast ref successful");
                         let to = std::any::type_name::<E>();
                         let from = self.error_name;
                         match err {
-                            Some(value) => value,
+                            Some(value) => value.as_outer(),
                             None => ResourceLoadError::InvalidDowncast(InvalidDowncast { to, from }),
                         }
                     })
@@ -75,11 +76,11 @@ impl<T, E: std::error::Error + Clone + 'static> ResourceHandle<T, E> {
             .map(|result| {
                 result
                     .map_err(|err| {
-                        let err: Option<ResourceLoadError<E>> = err.downcast();
+                        let err: Option<Box<_ResourceLoadError<E>>> = err.downcast().ok();
                         let to = std::any::type_name::<E>();
                         let from = self.error_name;
                         match err {
-                            Some(value) => value,
+                            Some(boxed) => boxed.into_outer(),
                             None => ResourceLoadError::InvalidDowncast(InvalidDowncast { to, from }),
                         }
                     })
@@ -121,7 +122,7 @@ pub struct SharedResourceHandle<T: 'static, E: std::error::Error> {
     inner: ResourceHandle<T, E>
 }
 
-impl<T, E: std::error::Error + Clone + 'static> SharedResourceHandle<T, E> {
+impl<T, E: std::error::Error + 'static> SharedResourceHandle<T, E> {
     pub fn value(&self) -> Option<std::result::Result<&T, ResourceLoadError<E>>> {
         self.inner.value()
     }
@@ -139,19 +140,19 @@ impl<T, E: std::error::Error + Clone + 'static> SharedResourceHandle<T, E> {
     }
 }
 
-impl<T: 'static, E: std::error::Error + Clone + 'static> From<ResourceHandle<T, E>> for SharedResourceHandle<T, E> {
+impl<T: 'static, E: std::error::Error + 'static> From<ResourceHandle<T, E>> for SharedResourceHandle<T, E> {
     fn from(value: ResourceHandle<T, E>) -> Self {
         value.share()
     }
 }
 
-impl<T: 'static, E: std::error::Error + Clone> Clone for SharedResourceHandle<T, E> {
+impl<T: 'static, E: std::error::Error> Clone for SharedResourceHandle<T, E> {
     fn clone(&self) -> Self {
         SharedResourceHandle { inner: clone_handle(&self.inner) }
     }
 }
 
-fn clone_handle<T, E: std::error::Error + Clone>(handle: &ResourceHandle<T, E>) -> ResourceHandle<T, E> {
+fn clone_handle<T, E: std::error::Error>(handle: &ResourceHandle<T, E>) -> ResourceHandle<T, E> {
     ResourceHandle { data: handle.data.clone(), status: handle.status.clone(), type_name: handle.type_name, error_name: handle.error_name, _type: handle._type, _error: handle._error }
 }
 
@@ -196,11 +197,15 @@ impl ResourceStatus {
     }
 }
 
-pub trait ResourceLoader<T, E: std::error::Error + Clone>: Send + Sync {
+pub trait ResourceLoader<T, E: std::error::Error>: Send + Sync {
     fn load(self, data: Box<[u8]>) -> std::result::Result<T, E>;
 }
 
-type ResourceData = OnceLock<std::result::Result<Box<dyn Any + Send + Sync>, ResourceLoadError<dyn std::error::Error + Send + Sync>>>;
+pub trait MultiResourceLoader<T, E: std::error::Error>: Send + Sync {
+    fn load(self, data: BTreeMap<PathBuf, Box<[u8]>>) -> std::result::Result<T, E>;
+}
+
+type ResourceData = OnceLock<std::result::Result<Box<dyn Any + Send + Sync>, Box<dyn Any + Send + Sync>>>;
 
 pub struct ResourceManager {
     asset_packs: HashMap<String, Arc<AssetPack>>,
@@ -231,7 +236,7 @@ impl ResourceManager {
         }).collect_vec()
     }
 
-    pub fn load<T: Send + Sync +'static, E: std::error::Error + Send + Sync + 'static + Clone, L: ResourceLoader<T, E> + 'static, P: AsRef<Path>>(&mut self, loader: L, resource: P) -> Result<ResourceHandle<T, E>, ResourceError> {
+    pub fn load_file<T: Send + Sync +'static, E: std::error::Error + Send + Sync + 'static, L: ResourceLoader<T, E> + 'static, P: AsRef<Path>>(&mut self, loader: L, resource: P) -> Result<ResourceHandle<T, E>, ResourceError> {
         let handle = self.resources.get(resource.as_ref())
             .and_then(ResourceHandleWeak::upgrade)
             .map(ResourceHandle::downcast)
@@ -273,12 +278,13 @@ impl ResourceManager {
                 let on_load = move |result: std::result::Result<Box<[u8]>, ResourcePackagerError>| {
                     let result = result
                         .map_err(Arc::new)
-                        .map_err(Into::<ResourceLoadError<E>>::into)
+                        .map_err(_ResourceLoadError::ResourcePackagerError)
                         .and_then(|data| {
-                            let value: Box<dyn Any + Send + Sync> = Box::new(loader.load(data).map_err(|err| LoadError(Box::new(err)))?);
+                            let value: Box<dyn Any + Send + Sync> = Box::new(loader.load(data).map_err(|err| _ResourceLoadError::LoadError(Arc::new(err)))?);
                             Ok(value)
                         })
-                        .map_err(|err| err.into_any());
+                        .map_err(Box::new)
+                        .map_err(|err| err as Box<dyn Any + Send + Sync>);
                     let status = match &result {
                         Ok(_) => ResourceStatus::Loaded,
                         Err(_) => ResourceStatus::Error,
@@ -295,11 +301,75 @@ impl ResourceManager {
         if !self.resources.contains_key(resource.as_ref()) {
             self.resources.insert(resource.as_ref().to_path_buf(), handle.downgrade().into_any());
         }
-        
-        let handle = self.resources.get(resource.as_ref())
+
+        Ok(handle)
+    }
+
+    pub fn load_dir<T: Send + Sync +'static, E: std::error::Error + Send + Sync + 'static, L: MultiResourceLoader<T, E> + 'static, P: AsRef<Path>>(&mut self, loader: L, dir: P) -> Result<ResourceHandle<T, E>, ResourceError> {
+        let handle = self.resources.get(dir.as_ref())
             .and_then(ResourceHandleWeak::upgrade)
             .map(ResourceHandle::downcast)
             .unwrap_or(Ok(ResourceHandle::<T, E>::new()))?;
+
+        let loader_handle = clone_handle(&handle);
+        // Give up instead of blocking because if the status is being writen, that means it is already being loaded
+        if let Ok(status) = handle.status.try_read() {
+            if status.is_unloaded() {
+                drop(status);
+                let handle = loader_handle;
+                let (asset_pack, dir): (PathBuf, PathBuf) = dir.as_ref().components()
+                    .enumerate()
+                    .partition_map(|(i, component)| if i == 0 { itertools::Either::Left(component) } else { itertools::Either::Right(component) });
+                
+                let asset_pack_name = asset_pack.to_string_lossy().into_owned();
+
+                if !self.asset_packs.contains_key(&asset_pack_name) {
+                    let path = asset_pack.with_added_extension("pack");
+                    if !path.exists() {
+                        Err(std::io::Error::from(NotFound))?;
+                    }
+
+                    let asset_pack = AssetPack::new(path).unwrap();
+                    self.asset_packs.insert(asset_pack_name.clone(), asset_pack);
+                }
+
+                #[allow(clippy::unwrap_used, reason="Key already checked.")]
+                let asset_pack = self.asset_packs.get(&asset_pack_name).unwrap().clone();
+
+                let before_load = {
+                    let handle = clone_handle(&handle);
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
+                    move || {
+                        *handle.status.write().unwrap() = ResourceStatus::Loading;
+                    }
+                };
+
+                let on_load = move |result:std::result::Result<BTreeMap<PathBuf, Box<[u8]>>, ResourcePackagerError>| {
+                    let result = result
+                        .map_err(Arc::new)
+                        .map_err(_ResourceLoadError::ResourcePackagerError)
+                        .and_then(|data| {
+                            let value: Box<dyn Any + Send + Sync> = Box::new(loader.load(data).map_err(|err| _ResourceLoadError::LoadError(Arc::new(err)))?);
+                            Ok(value)
+                        })
+                        .map_err(Box::new)
+                        .map_err(|err| err as Box<dyn Any + Send + Sync>);
+                    let status = match &result {
+                        Ok(_) => ResourceStatus::Loaded,
+                        Err(_) => ResourceStatus::Error,
+                    };
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
+                    handle.data.set(result).unwrap();
+                    #[allow(clippy::unwrap_used, reason="Poisoned lock should panic.")]
+                    {*handle.status.write().unwrap() = status;}
+                };
+                asset_pack.load_dir(dir, before_load, on_load);
+            }
+        };
+
+        if !self.resources.contains_key(dir.as_ref()) {
+            self.resources.insert(dir.as_ref().to_path_buf(), handle.downgrade().into_any());
+        }
 
         Ok(handle)
     }
@@ -312,15 +382,14 @@ impl Default for ResourceManager {
 }
 
 pub mod error {
-    use std::{any::Any, sync::Arc};
+    use std::sync::Arc;
 
-    use downcast_rs::Downcast;
     use error::{Error, union};
     use resource_packager::packager::ResourcePackagerError;
     use crate::{error as errors_module};
 
     #[derive(Error, Debug, Clone, Copy)]
-    #[error("Attempted to downcast type '{from}' to '{to}.")]
+    #[error("Attempted to downcast type '{from}' to '{to}'.")]
     pub struct InvalidDowncast {
         pub to: &'static str,
         pub from: &'static str
@@ -328,44 +397,27 @@ pub mod error {
 
     #[derive(Error, Debug, Clone)]
     #[error("{0}")]
-    pub struct LoadError<E: std::error::Error + ?Sized>(pub Box<E>);
+    pub struct LoadError<E: std::error::Error>(pub Arc<E>);
 
-    union!(LoadError<E>: LoadError, Arc<ResourcePackagerError>: ResourcePackagerError, InvalidDowncast as #[derive(Clone)] ResourceLoadError<E: std::error::Error + ?Sized>);
+    union!(LoadError<E>: LoadError, Arc<ResourcePackagerError>: ResourcePackagerError, InvalidDowncast as ResourceLoadError<E: std::error::Error>);
 
-    impl ResourceLoadError<dyn std::error::Error + Send + Sync> {
-        pub fn downcast_and_clone<T: std::error::Error + Clone + 'static>(&self) -> Option<ResourceLoadError<T>> {
-            Some(match self {
-                ResourceLoadError::LoadError(load_error) => ResourceLoadError::LoadError({
-                    let any: &dyn Any = load_error.0.as_any();
-                    let downcast: &T = any.downcast_ref()?;
-                    
-                    LoadError(Box::new(downcast.clone()))
-                }),
-                ResourceLoadError::ResourcePackagerError(resource_packager_error) => ResourceLoadError::ResourcePackagerError(resource_packager_error.clone()),
-                ResourceLoadError::InvalidDowncast(invalid_downcast) => ResourceLoadError::InvalidDowncast(*invalid_downcast),
-            })
-        }
-
-        pub fn downcast<T: std::error::Error + 'static>(self) -> Option<ResourceLoadError<T>> {
-            Some(match self {
-                ResourceLoadError::LoadError(load_error) => ResourceLoadError::LoadError({
-                    let any: Box<dyn std::error::Error> = load_error.0;
-                    let downcast: Box<T> = any.downcast().ok()?;
-                    
-                    LoadError(downcast)
-                }),
-                ResourceLoadError::ResourcePackagerError(resource_packager_error) => ResourceLoadError::ResourcePackagerError(resource_packager_error),
-                ResourceLoadError::InvalidDowncast(invalid_downcast) => ResourceLoadError::InvalidDowncast(invalid_downcast),
-            })
-        }
+    pub(in crate::engine::resources::resource_manager) enum _ResourceLoadError<E> {        
+        LoadError(Arc<E>),
+        ResourcePackagerError(Arc<ResourcePackagerError>)
     }
 
-    impl<E: std::error::Error + Send + Sync + 'static> ResourceLoadError<E> {
-        pub(in crate::engine::resources::resource_manager) fn into_any(self) -> ResourceLoadError<dyn std::error::Error + Send + Sync> {
+    impl<E: std::error::Error> _ResourceLoadError<E> {
+        pub fn into_outer(self) -> ResourceLoadError<E> {
             match self {
-                ResourceLoadError::LoadError(load_error) => ResourceLoadError::LoadError(LoadError(Box::new(load_error.0))),
-                ResourceLoadError::ResourcePackagerError(resource_packager_error) => ResourceLoadError::ResourcePackagerError(resource_packager_error),
-                ResourceLoadError::InvalidDowncast(invalid_downcast) => ResourceLoadError::InvalidDowncast(invalid_downcast),
+                _ResourceLoadError::LoadError(err) => ResourceLoadError::LoadError(LoadError(err)),
+                _ResourceLoadError::ResourcePackagerError(resource_packager_error) => ResourceLoadError::ResourcePackagerError(resource_packager_error)
+            }
+        }
+
+        pub fn as_outer(&self) -> ResourceLoadError<E> {
+            match self {
+                _ResourceLoadError::LoadError(err) => ResourceLoadError::LoadError(LoadError(err.clone())),
+                _ResourceLoadError::ResourcePackagerError(resource_packager_error) => ResourceLoadError::ResourcePackagerError(resource_packager_error.clone())
             }
         }
     }
