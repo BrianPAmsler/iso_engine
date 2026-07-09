@@ -3,7 +3,7 @@
 use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter}, sync::Arc};
 
 use derive_serialize::Serialize;
-use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::vec3}, graphics::terrain::Terrain}, register_serializable_types};
+use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::vec3}, graphics::terrain::Terrain, resources::serialization::AsSerialize}, register_serializable_types};
 use regex::Regex;
 
 use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
@@ -37,7 +37,6 @@ impl Component for FPSCounter {
         }
         
         if engine.input.get_key_state(Key::KeyO).press {
-            let root = engine.world.get_root();
             let file = OpenOptions::new()
                 .create(true)
                 .truncate(true)
@@ -45,7 +44,7 @@ impl Component for FPSCounter {
                 .open("target/test_serialize.json")?;
             let writer = BufWriter::new(file);
             let mut serializer = serde_json::Serializer::new(writer);
-            engine.world.serialize_object(root, &mut serializer)?.try_unwrap()?;
+            engine.world.serialize_object(None, &mut serializer)?.try_unwrap()?;
 
             println!("Saved.");
         }
@@ -100,8 +99,8 @@ impl Renderer {
 
 impl Component for Renderer {
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> Result<()> {
-        let sprite1 = engine.world.find_child(engine.world.get_root(), "Sprite 1")?.try_unwrap()?;
-        let sprite2 = engine.world.find_child(engine.world.get_root(), "Sprite 2")?.try_unwrap()?;
+        let sprite1 = engine.world.find_child(None, "Sprite 1")?.try_unwrap()?;
+        let sprite2 = engine.world.find_child(None, "Sprite 2")?.try_unwrap()?;
 
         self.sprite1 = Some(sprite1);
         self.sprite2 = Some(sprite2);
@@ -110,6 +109,12 @@ impl Component for Renderer {
     }
 
     fn update(&mut self, engine: &mut Engine, _: ObjectID, delta_time: f32) -> Result<()> {
+        if engine.input.get_key_state(Key::KeyX).press {
+            let obj = engine.world.find_child(None, "1")?.try_unwrap()?;
+
+            engine.world.destroy(obj)?;
+        }
+        
         let Some(camera) = engine.world.get_main_camera_mut() else { return Ok(()) };
         // println!("asdf");
         let speed = 10.0;
@@ -162,7 +167,7 @@ impl Component for Renderer {
         }
 
         if engine.input.get_key_state(Key::KeyT).press {
-            let terrain = engine.world.find_child(engine.world.get_root(), "a")?.try_unwrap()?;
+            let terrain = engine.world.find_child(None, "a")?.try_unwrap()?;
             let terrain = engine.world.get_component::<Terrain>(terrain)?.try_unwrap()?;
             let mut terrain = engine.world.borrow_component_mut(terrain)?;
 
@@ -186,15 +191,48 @@ impl Component for Renderer {
     }
 }
 
+struct DestroyTest;
+
+impl AsSerialize for DestroyTest {}
+
+impl Component for DestroyTest {
+    fn on_remove(&mut self, engine: &mut Engine, owner: ObjectID) -> Result<()> {
+        let name = engine.world.get_name(owner)?;
+        println!("Removed: {name}");
+
+        Ok(())
+    }
+}
+
 fn start_game() -> Result<()> {
     let mut engine = Engine::new("Test Window", 1280, 720, WindowMode::Windowed)?;
 
     register_serializable_types!(FPSCounter, Renderer);
 
-    let root = engine.world.get_root();
     let save_file = BufReader::new(File::open("target/save.json")?);
     let mut deserializer = serde_json::Deserializer::new(IoRead::new(save_file));
-    engine.world.deserialize_object(root, &mut deserializer)?;
+    engine.world.deserialize_object(None, &mut deserializer)?;
+
+    let o1 = engine.world.create_game_object("1", None)?;
+    engine.world.add_component(o1, DestroyTest)?;
+    let o2 = engine.world.create_game_object("2", o1)?;
+    engine.world.add_component(o2, DestroyTest)?;
+    let o3 = engine.world.create_game_object("3", o2)?;
+    engine.world.add_component(o3, DestroyTest)?;
+    let o4 = engine.world.create_game_object("4", o3)?;
+    engine.world.add_component(o4, DestroyTest)?;
+    let o5 = engine.world.create_game_object("5", o4)?;
+    engine.world.add_component(o5, DestroyTest)?;
+    let o6 = engine.world.create_game_object("6", o2)?;
+    engine.world.add_component(o6, DestroyTest)?;
+    let o7 = engine.world.create_game_object("7", o2)?;
+    engine.world.add_component(o7, DestroyTest)?;
+    let o8 = engine.world.create_game_object("8", o2)?;
+    engine.world.add_component(o8, DestroyTest)?;
+    let o9 = engine.world.create_game_object("9", o2)?;
+    engine.world.add_component(o9, DestroyTest)?;
+    let o10 = engine.world.create_game_object("10", o2)?;
+    engine.world.add_component(o10, DestroyTest)?;
 
     // let a = engine.world.create_game_object("a", engine.world.get_root())?;
 

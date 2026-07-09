@@ -1,4 +1,4 @@
-use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet}, marker::PhantomData, rc::Rc};
+use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet, VecDeque}, marker::PhantomData, rc::Rc};
 
 use crate::engine::{game_object::game_object::serialize, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
 use derive_serialize::Serialize;
@@ -78,6 +78,7 @@ pub struct World {
     ordered_components: BTreeMap<i32, HashSet<ComponentID<()>>>,
     uninitialized_components: BTreeMap<i32, HashSet<ComponentID<()>>>,
     removed_comonents: Vec<(ObjectID, ComponentRef)>,
+    removed_objects: Vec<ObjectID>,
     main_camera: Option<Camera>
 }
 
@@ -121,6 +122,7 @@ impl World {
             ordered_components: BTreeMap::new(),
             uninitialized_components: BTreeMap::new(),
             removed_comonents: Vec::new(),
+            removed_objects: Vec::new(),
             main_camera: None
         };
 
@@ -215,6 +217,27 @@ impl World {
         errors
     }
 
+    pub(in crate::engine) fn cleanup(engine: &mut Engine) -> Vec<AnyError> {
+        let mut errors = Vec::new();
+
+        for (owner, component) in engine.world.removed_comonents.drain(..).collect_vec() {
+            #[allow(clippy::expect_used, reason="Rc should never leak, if it does crashing is justified.")]
+            let mut component = Rc::into_inner(component).expect("Cannot remove component due to Rc leak.").into_inner();
+            
+            if let Err(error) = component.on_remove(engine, owner) {
+                errors.push(error);
+            }
+        }
+
+        for object in engine.world.removed_objects.drain(..) {
+            if let Err(error) = engine.world.objects.remove(object.idx) {
+                errors.push(error.into());
+            }
+        }
+
+        errors
+    }
+
     pub fn get_main_camera(&self) -> Option<&Camera> {
         self.main_camera.as_ref()
     }
@@ -240,11 +263,7 @@ impl World {
 
         Ok(())
     }
-
-    pub fn get_root(&self) -> ObjectID {
-        self.root
-    }
-
+    
     pub fn add_component<C: Component>(&mut self, object: ObjectID, component: C) -> Result<(), ObjectError> {
         let priority = *component.priority();
         let index = self.components.insert(Rc::new(RefCell::new(Box::new(component))));
@@ -285,19 +304,22 @@ impl World {
     pub fn remove_component<C>(&mut self, component: ComponentID<C>) -> Result<(), ComponentError> {
         let c = self.components.remove(component.index)?;
 
-        #[allow(clippy::unwrap_used, reason = "If the code is correct, I'm pretty sure it should be impossible a component to exist without a parent.")]
-        let owner = self.objects.get_mut(component.owner.idx).unwrap();
-        owner.components.retain(|e| *e != component.transmute());
+        // If the object has been removed already, continue removing component
+        match self.objects.get_mut(component.owner.idx) {
+            Ok(owner) => {
+                owner.components.retain(|e| *e != component.transmute());
+            },
+            Err(crate::engine::data_structures::error::Error::ElementRemovedError) => (),
+            Err(e) => Err(e)?
+        }
 
-        match self.ordered_components.get_mut(c.borrow().priority()) {
-            Some(list) => list.remove(&component.transmute()),
-            None => unreachable!(),
-        };
+        if let Some(list) =  self.ordered_components.get_mut(c.borrow().priority()) {
+            list.remove(&component.transmute());
+        }
 
-        match self.uninitialized_components.get_mut(c.borrow().priority()) {
-            Some(list) => list.remove(&component.transmute()),
-            None => unreachable!(),
-        };
+        if let Some(list) =  self.uninitialized_components.get_mut(c.borrow().priority()) {
+            list.remove(&component.transmute());
+        }
 
         self.removed_comonents.push((component.owner, c));
 
@@ -324,14 +346,19 @@ impl World {
         Ok(downcast)
     }
 
-    pub fn create_game_object<S: Into<String>>(&mut self, name: S, parent: ObjectID) -> Result<ObjectID, ObjectError> {
+    /// Creates a GameObject with the given parent.
+    /// When parent is ```None``` the object is added to the world's root.
+    pub fn create_game_object<S: Into<String>, O: Into<Option<ObjectID>>>(&mut self, name: S, parent: O) -> Result<ObjectID, ObjectError> {
+        let parent = parent.into().unwrap_or(self.root);
+
+        // Make sure parent exists before proceding
         self.objects.get(parent.idx)?;
 
         let name = name.into();
         let new_obj = GameObject { name, parent: self.root, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new() };
         let new_obj = ObjectID { idx: self.objects.insert(new_obj) };
 
-        self.set_parent(new_obj, parent)?;
+        self.set_parent(new_obj, Some(parent))?;
 
         Ok(new_obj)
     }
@@ -366,7 +393,10 @@ impl World {
         Ok(obj.children.iter().map(|child| child.to_owned()).collect())
     }
 
-    pub fn find_child(&self, object: ObjectID, name: &str) -> Result<Option<ObjectID>, ObjectError> {
+    /// Searches for a child with a given name. When object is ```None``` it will search the root object.
+    pub fn find_child<O: Into<Option<ObjectID>>>(&self, object: O, name: &str) -> Result<Option<ObjectID>, ObjectError> {
+        let object = object.into().unwrap_or(self.root);
+
         let obj = self.objects.get(object.idx)?;
 
         for child in &obj.children {
@@ -380,13 +410,47 @@ impl World {
         Ok(None)
     }
 
-    pub fn get_parent(&self, object: ObjectID) -> Result<ObjectID, ObjectError> {
-        let obj = self.objects.get(object.idx)?;
+    /// Searches for a child recursively with a given name. When object is ```None``` it will search the root object.
+    pub fn find_child_recursive<O: Into<Option<ObjectID>>>(&self, object: O, name: &str) -> Result<Option<ObjectID>, ObjectError> {
+        let object = object.into().unwrap_or(self.root);
 
-        Ok(obj.parent)
+        let mut queue = VecDeque::new();
+        queue.push_back(object);
+
+        while !queue.is_empty() {
+            #[allow(clippy::unwrap_used, reason = "checked")]
+            let object = queue.pop_front().unwrap();
+            let obj = self.objects.get(object.idx)?;
+
+            for child in &obj.children {
+                let child_name = self.get_name(*child)?;
+
+                if name == child_name {
+                    return Ok(Some(*child));
+                }
+
+                queue.push_back(*child);
+            }
+        }
+
+        Ok(None)
     }
 
-    pub fn set_parent(&mut self, object: ObjectID, parent: ObjectID) -> Result<(), ObjectError> {
+    /// Returns the ```ObjectID``` of the given object's parent.
+    /// Returns none if the parent is the root object.
+    pub fn get_parent(&self, object: ObjectID) -> Result<Option<ObjectID>, ObjectError> {
+        let obj = self.objects.get(object.idx)?;
+
+        if obj.parent == self.root {
+            return Ok(None)
+        }
+
+        Ok(Some(obj.parent))
+    }
+
+    pub fn set_parent<O: Into<Option<ObjectID>>>(&mut self, object: ObjectID, parent: O) -> Result<(), ObjectError> {
+        let parent = parent.into().unwrap_or(self.root);
+
         self.objects.get(parent.idx)?; // Make sure parent is valid first
         let obj = self.objects.get_mut(object.idx)?;
         let prev_parent = obj.parent;
@@ -416,26 +480,35 @@ impl World {
     }
 
     pub fn destroy(&mut self, object: ObjectID) -> Result<(), ObjectError> {
-        let todo = (); // TODO: This is wrong. Doesn't forbid removing root, doesn't recursively remove children.
-        
-        let obj = self.objects.get(object.idx)?;
-        let components = obj.components.iter().copied().collect_vec();
+        let parent = self.objects.get(object.idx)?.parent;
 
-        #[allow(clippy::unwrap_used, reason="ObjectID is already confirmed valid.")]
-        let parent = self.objects.get_mut(obj.parent.idx).unwrap();
+        self.removed_objects.push(object);
+
+        let parent = self.objects.get_mut(parent.idx)?;
         parent.children.remove(&object);
 
+        let GameObject { components, children, .. } = self.objects.get_mut(object.idx)?;
+
+        let components = components.drain(..).collect_vec();
+        let children = children.drain().collect_vec();
+        
         #[allow(clippy::unwrap_used, reason="If the code is correct an object's component handles should always be valid.")]
         components.into_iter().try_for_each(|c| {
             self.remove_component(c)
         }).unwrap();
 
-        self.objects.remove(object.idx)?;
+        let results = children.into_iter().map(|child| self.destroy(child)).collect_vec();
+
+        for result in results {
+            result?;
+        }
 
         Ok(())
     }
 
-    pub fn serialize_object<S: serde::Serializer>(&mut self, object: ObjectID, serializer: S) -> Result<Option<S::Ok>, S::Error> {
+    pub fn serialize_object<S: serde::Serializer, O: Into<Option<ObjectID>>>(&mut self, object: O, serializer: S) -> Result<Option<S::Ok>, S::Error> {
+        let object = object.into().unwrap_or(self.root);
+
         let Some(object) = serialize::GameObject::new(self, object) else { return Ok(None) };
 
         Ok(Some(object.serialize(serializer)?))
@@ -463,12 +536,14 @@ impl World {
         }
 
         for child in children {
-            let new_target = self.create_game_object(child.name.clone(), target).unwrap();
+            let new_target = self.create_game_object(child.name.clone(), Some(target)).unwrap();
             self.deserialize_object_helper(child, new_target);
         }
     }
 
-    pub fn deserialize_object<'de, D: serde::Deserializer<'de>>(&mut self, target: ObjectID, deserializer: D) -> Result<Option<()>, D::Error> {
+    pub fn deserialize_object<'de, D: serde::Deserializer<'de>, O: Into<Option<ObjectID>>>(&mut self, target: O, deserializer: D) -> Result<Option<()>, D::Error> {
+        let target = target.into().unwrap_or(self.root);
+
         if !self.objects.contains(target.idx) { return Ok(None) }
 
         let object = serialize::GameObject::deserialize(deserializer)?;
@@ -476,10 +551,6 @@ impl World {
         self.deserialize_object_helper(object, target);
 
         Ok(Some(()))
-    }
-
-    pub(in crate::engine) fn get_removed_components(&mut self) -> Vec<(ObjectID, ComponentRef)> {
-        std::mem::take(&mut self.removed_comonents)
     }
 }
 

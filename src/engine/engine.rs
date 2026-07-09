@@ -190,10 +190,6 @@ impl Engine {
     }
 
     fn update(&mut self) -> crate::error::any::Result<()> {
-        self.gfx.update_pipelines(&self.window)?;
-
-        // TODO: move clear call to after game tick
-        
         // Game tick
         let current_time = self.get_time();
         let errors = World::update(self, (current_time - self.last_tick) as f32);
@@ -210,6 +206,13 @@ impl Engine {
             self.last_fixed_tick = current_time;
         }
 
+        // Cleanup
+        let errors = World::cleanup(self);
+        self.error_queue.extend(errors);
+
+        // Render
+        self.gfx.update_pipelines(&self.window)?;
+        
         if let Some(camera) = self.world.get_main_camera_mut() {
             let view_matrix = camera.view_matrix();
             let projection_matrix = camera.projection_matrix();
@@ -222,13 +225,6 @@ impl Engine {
             self.log_error(result);
         }
 
-        for (owner, component) in self.world.get_removed_components() {
-            #[allow(clippy::expect_used, reason="Rc should never leak, if it does crashing is justified.")]
-            let mut component = Rc::into_inner(component).expect("Cannot remove component due to Rc leak.").into_inner();
-            let result = component.on_remove(self, owner);
-            self.log_error(result);
-        }
-
         self.gfx.draw()?;
 
         self.log_errors();
@@ -236,6 +232,7 @@ impl Engine {
         Ok(())
     }
 
+    #[inline]
     fn log_error<T, E: Into<Error>>(&mut self, result: std::result::Result<T, E>) -> Option<T> {
         match result {
             Ok(value) => Some(value),
