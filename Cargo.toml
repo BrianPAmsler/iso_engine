@@ -43,6 +43,8 @@ nalgebra = "0.33.1"
 typenum = "1.17.0"
 num = "0.4.3"
 paste = "1.0.15"
+toml = "1.1.2"
+rstar = "0.13.0"
 
 # [profile.release]
 # debug=true
