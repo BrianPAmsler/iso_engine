@@ -304,8 +304,6 @@ impl Component for Terrain {
     fn on_remove(&mut self, _engine: &mut crate::engine::Engine, _owner: crate::engine::game_object::ObjectID) -> crate::error::any::Result<()> {
         unimplemented!("Terrain on_remove unimplemented.");
     }
-
-    fn priority(&self) -> &'static i32 { &0 }
 }
 
 pub mod error {

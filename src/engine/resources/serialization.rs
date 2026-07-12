@@ -61,7 +61,7 @@ pub mod hidden {
     use derive_serialize::tuple_impl;
     use itertools::Itertools;
 
-    use crate::{engine::{game_object::component::Component, resources::serialization::{CompSer, Deserializer, DeserializerEnum, FieldValue, Serialize, TYPE_DICT, error::{DeserializeError, IncorrectFields, IncorrectType}}}};
+    use crate::{engine::{game_object::component::Component, resources::serialization::{SerializableComponent, Deserializer, DeserializerEnum, FieldValue, Serialize, TYPE_DICT, error::{DeserializeError, IncorrectFields, IncorrectType}}}};
 
     macro_rules! primitive_impl {
         ($variant:ident: $($type:ty),* as $as:ident) => {
@@ -330,7 +330,7 @@ pub mod hidden {
 
     impl<T: Serialize + Component> Wrapper<T> {
         pub fn register() -> Registration {
-            Registration(DeserializerEnum::Component(Deserializer::<dyn CompSer + 'static>::new::<T>()))
+            Registration(DeserializerEnum::Component(Deserializer::<dyn SerializableComponent + 'static>::new::<T>()))
         }
     }
 
@@ -350,11 +350,11 @@ pub mod hidden {
     }
 }
 
-pub trait CompSer: Component + Serialize {}
-impl<T: Component + Serialize> CompSer for T {}
+pub trait SerializableComponent: DynComponent + Serialize {}
+impl<T: DynComponent + Serialize> SerializableComponent for T {}
 
 enum DeserializerEnum {
-    Component(Deserializer<dyn CompSer>),
+    Component(Deserializer<dyn SerializableComponent>),
     NonComponent(Deserializer<dyn Serialize>)
 }
 
@@ -385,12 +385,12 @@ impl Deserializer<dyn Serialize> {
     }
 }
 
-impl Deserializer<dyn CompSer> {
-    fn new<T: Serialize + Component + Sized + 'static>() -> Deserializer<dyn CompSer> {
+impl Deserializer<dyn SerializableComponent> {
+    fn new<T: Serialize + Component + Sized + 'static>() -> Deserializer<dyn SerializableComponent> {
         Deserializer { deserialize: Box::new(|fields| Ok(T::deserialize(fields)?)), _pd: PhantomData }
     }
 
-    fn deserialize(&self, fields: StructRepr) -> Result<Box<dyn CompSer>, DeserializeError> {
+    fn deserialize(&self, fields: StructRepr) -> Result<Box<dyn SerializableComponent>, DeserializeError> {
         (self.deserialize)(fields)
     }
 }
@@ -400,7 +400,7 @@ thread_local! {
 }
 
 pub enum DeserializedType {
-    Component(Box<dyn CompSer>),
+    Component(Box<dyn SerializableComponent>),
     NonComponent(Box<dyn Serialize>)
 }
 
@@ -440,7 +440,7 @@ pub use register_serializable_types;
 
 use derive_serialize::Serialize;
 
-use crate::engine::{game_object::component::Component, resources::serialization::error::{DeserializeError, UnknownType}};
+use crate::engine::{game_object::component::{Component, DynComponent}, resources::serialization::error::{DeserializeError, UnknownType}};
 
 pub mod error {
     use error::{Error, union};
@@ -471,7 +471,7 @@ mod tests {
     use std::ops::Deref;
     use std::io::Read;
 
-    use crate::engine::{game_object::component::Component, resources::serialization::{CompSer, DeserializedType, TYPE_DICT, dyn_deserialize}};
+    use crate::engine::{game_object::component::Component, resources::serialization::{SerializableComponent, DeserializedType, TYPE_DICT, dyn_deserialize}};
 
     #[derive(Debug, derive_serialize::Serialize)]
     #[allow(unused, reason="test")]
@@ -523,7 +523,7 @@ mod tests {
         // TODO: Assert instead of print
         TYPE_DICT.with(|type_dict| println!("{:?}", type_dict.borrow().deref()));
 
-        let mut test_struct: Box<dyn CompSer> = Box::new(TestStruct {
+        let mut test_struct: Box<dyn SerializableComponent> = Box::new(TestStruct {
             name: "Test".to_owned(),
             a: 1,
             b: 2.0,

@@ -1,7 +1,8 @@
 use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet, VecDeque}, marker::PhantomData, rc::Rc};
 
-use crate::engine::{game_object::game_object::serialize, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
+use crate::engine::{game_object::{component::DynComponent, game_object::serialize}, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
 use derive_serialize::Serialize;
+use downcast_rs::Downcast;
 use itertools::{Either::{Left, Right}, Itertools};
 use serde::{Deserialize as _, Serialize as _};
 
@@ -69,7 +70,7 @@ pub mod error {
     }
 }
 
-type ComponentRef = Rc<RefCell<Box<dyn Component>>>;
+type ComponentRef = Rc<RefCell<Box<dyn DynComponent>>>;
 
 pub struct World {
     pub(in crate::engine::game_object) root: ObjectID,
@@ -265,25 +266,11 @@ impl World {
     }
     
     pub fn add_component<C: Component>(&mut self, object: ObjectID, component: C) -> Result<(), ObjectError> {
-        let priority = *component.priority();
-        let index = self.components.insert(Rc::new(RefCell::new(Box::new(component))));
-        let owner = object;
-        let object = self.objects.get_mut(object.idx)?;
-
-        let id = ComponentID { index, type_: TypeId::of::<C>(), owner, _pd: PhantomData };
-        object.components.push(id);
-
-        let set = self.ordered_components.entry(priority).or_default();
-        set.insert(id);
-
-        let uninitialized = self.uninitialized_components.entry(priority).or_default();
-        uninitialized.insert(id);
-
-        Ok(())
+        self.add_dyn_component(object, Box::new(component))
     }
 
-    pub fn add_component_any(&mut self, object: ObjectID, component: Box<dyn Component>) -> Result<(), ObjectError> {
-        let priority = *component.priority();
+    pub(in crate::engine) fn add_dyn_component(&mut self, object: ObjectID, component: Box<dyn DynComponent>) -> Result<(), ObjectError> {
+        let priority = component.priority();
         let type_ = component.type_id();
         let index = self.components.insert(Rc::new(RefCell::new(component)));
         let owner = object;
@@ -313,11 +300,11 @@ impl World {
             Err(e) => Err(e)?
         }
 
-        if let Some(list) =  self.ordered_components.get_mut(c.borrow().priority()) {
+        if let Some(list) =  self.ordered_components.get_mut(&c.borrow().priority()) {
             list.remove(&component.transmute());
         }
 
-        if let Some(list) =  self.uninitialized_components.get_mut(c.borrow().priority()) {
+        if let Some(list) =  self.uninitialized_components.get_mut(&c.borrow().priority()) {
             list.remove(&component.transmute());
         }
 
@@ -330,7 +317,7 @@ impl World {
         let ref_ = self.components.get(component.index)?.borrow();
 
         let downcast = Ref::filter_map(ref_, |t| {
-            t.downcast_ref()
+            t.as_any().downcast_ref()
         }).map_err(|_| ComponentDowncastError { type_name: std::any::type_name::<C>().to_owned() })?;
 
         Ok(downcast)
@@ -340,7 +327,7 @@ impl World {
         let ref_ = self.components.get(component.index)?.borrow_mut();
 
         let downcast = RefMut::filter_map(ref_, |t| {
-            t.downcast_mut()
+            t.as_any_mut().downcast_mut()
         }).map_err(|_| ComponentDowncastError { type_name: std::any::type_name::<C>().to_owned() })?;
 
         Ok(downcast)
@@ -532,7 +519,7 @@ impl World {
         for component in components {
             let DeserializedType::Component(component) = dyn_deserialize(component).unwrap() else { unreachable!() };
 
-            self.add_component_any(target, component).unwrap();
+            self.add_dyn_component(target, component).unwrap();
         }
 
         for child in children {

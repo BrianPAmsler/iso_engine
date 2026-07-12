@@ -98,6 +98,8 @@ impl Renderer {
 }
 
 impl Component for Renderer {
+    const PRIORITY: i32 = -1;
+    
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> Result<()> {
         let sprite1 = engine.world.find_child(None, "Sprite 1")?.try_unwrap()?;
         let sprite2 = engine.world.find_child(None, "Sprite 2")?.try_unwrap()?;
@@ -184,10 +186,6 @@ impl Component for Renderer {
         if let Projection::Orthographic { width, .. } = camera.projection_mut() { *width = self.camera_size }
 
         Ok(())   
-    }
-
-    fn priority(&self) -> &'static i32 {
-        &-1
     }
 }
 

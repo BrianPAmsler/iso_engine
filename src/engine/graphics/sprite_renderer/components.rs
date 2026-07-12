@@ -51,6 +51,8 @@ impl SpriteSheet {
 // }
 
 impl Component for SpriteSheet {
+    const PRIORITY: i32 = i32::MIN;
+
     fn init(&mut self, engine: &mut Engine, _: ObjectID) -> crate::error::any::Result<()> {
         self.resource_handle = Some(engine.resource_manager.load_file(TextureLoader::<RgbaImage>::new(&engine.gfx), &self.resource)?);
 
@@ -72,10 +74,6 @@ impl Component for SpriteSheet {
         engine.sprite_renderer.remove_sprite_sheet(&mut engine.gfx, self.id.ok_or(Uninitialized)?);
 
         Ok(())
-    }
-
-    fn priority(&self) -> &'static i32 {
-        &i32::MIN
     }
 }
 
@@ -100,6 +98,8 @@ impl Sprite {
 }
 
 impl Component for Sprite {
+    const PRIORITY: i32 = i32::MAX;
+
     fn update(&mut self, engine: &mut Engine, owner: ObjectID, _delta_time: f32) -> crate::error::any::Result<()> {
         if self.sprite_sheet_id.is_none() {
             self.sprite_sheet_id = match engine.sprite_renderer.get_sprite_sheet_by_name(&self.name) {
@@ -118,10 +118,6 @@ impl Component for Sprite {
         );
 
         Ok(())
-    }
-
-    fn priority(&self) -> &'static i32 {
-        &i32::MAX
     }
 }
 
@@ -146,6 +142,8 @@ impl AnimatedSprite {
 }
 
 impl Component for AnimatedSprite {
+    const PRIORITY: i32 = i32::MAX;
+    
     fn update(&mut self, engine: &mut Engine, owner: ObjectID, delta_time: f32) -> crate::error::any::Result<()> {
         if self.animated_sprite_id.is_none() {
             let id = match engine.sprite_renderer.get_animated_sprite_by_name(&self.name) {
@@ -179,10 +177,6 @@ impl Component for AnimatedSprite {
         );
 
         Ok(())
-    }
-
-    fn priority(&self) -> &'static i32 {
-        &i32::MAX
     }
 }
 
