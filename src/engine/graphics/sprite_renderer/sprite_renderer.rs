@@ -178,7 +178,7 @@ impl SpriteRenderer {
             let wh = vec2!(sprite_sheet.width(), sprite_sheet.height());
             vec4!(x, y, width, height) / vec4!(wh, wh)
         })
-        .map(|vec| Vec4Aligned(vec.as_array()))
+        .map(|vec| Vec4Aligned(vec.into_array()))
         .collect_vec();
 
         let pipeline = PipelineBuilder::new(gfx)
@@ -251,8 +251,8 @@ impl SpriteRenderer {
         let Ok(sheet) = self.sprite_sheets.get_mut(sprite_sheet.0) else { return; };
 
         let SpriteData { position, dimensions, anchor, sprite_id } = sprite;
-        let dimensions = vec4!(anchor, dimensions).as_array();
-        let position = AlignedVec3(position.as_array());
+        let dimensions = vec4!(anchor, dimensions).into_array();
+        let position = AlignedVec3(position.into_array());
         let id = sprite_id;
 
         let sprite_data = GLSpriteStruct {
@@ -301,7 +301,7 @@ impl SpriteRenderer {
 
             let view = view_matrix.as_array();
             let projection = projection_matrix.as_array();
-            let texel_offset = texel_offset.as_array();
+            let texel_offset = texel_offset.into_array();
             *unifom_buffer.write()? = InputData {
                 view,
                 projection,

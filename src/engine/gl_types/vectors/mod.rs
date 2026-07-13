@@ -11,7 +11,7 @@ use crate::engine::gl_types::{Make, gl_types::inner_matrix::InnerMatrix};
 
 #[allow(private_bounds, reason="InnerMatrix and Make are not intended to be used outside the gl_types module.")]
 pub trait VecN<const N: usize>: InnerMatrix<N, 1> + Make<Matrix<f32, Const<N>, Const<1>, ArrayStorage<f32, N, 1>>> + AsRef<Self> {
-    fn as_array(self) -> [f32; N];
+    fn into_array(self) -> [f32; N];
     fn from_array(array: [f32; N]) -> Self;
     fn as_slice(&self) -> &[f32; N];
     fn as_slice_mut(&mut self) -> &mut [f32; N];
@@ -33,7 +33,7 @@ pub mod swizzles {
 }
 
 impl<const N: usize, T: InnerMatrix<N, 1> + Make<Matrix<f32, Const<N>, Const<1>, ArrayStorage<f32, N, 1>>> + AsRef<T>> VecN<N> for T {
-    fn as_array(self) -> [f32; N] {
+    fn into_array(self) -> [f32; N] {
         let mat = self.into_inner_matrix();
 
         mat.data.0[0]
@@ -59,4 +59,40 @@ impl<const N: usize, T: InnerMatrix<N, 1> + Make<Matrix<f32, Const<N>, Const<1>,
         ))
     }
 
+}
+
+impl From<[f32; 2]> for Vec2 {
+    fn from(value: [f32; 2]) -> Self {
+        Self::from_array(value)
+    }
+}
+
+impl From<Vec2> for [f32; 2] {
+    fn from(value: Vec2) -> Self {
+        value.into_array()
+    }
+}
+
+impl From<[f32; 3]> for Vec3 {
+    fn from(value: [f32; 3]) -> Self {
+        Self::from_array(value)
+    }
+}
+
+impl From<Vec3> for [f32; 3] {
+    fn from(value: Vec3) -> Self {
+        value.into_array()
+    }
+}
+
+impl From<[f32; 4]> for Vec4 {
+    fn from(value: [f32; 4]) -> Self {
+        Self::from_array(value)
+    }
+}
+
+impl From<Vec4> for [f32; 4] {
+    fn from(value: Vec4) -> Self {
+        value.into_array()
+    }
 }

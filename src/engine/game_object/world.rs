@@ -1,9 +1,10 @@
 use std::{any::TypeId, cell::{Ref, RefCell, RefMut}, collections::{BTreeMap, HashSet, VecDeque}, marker::PhantomData, rc::Rc};
 
-use crate::engine::{game_object::{component::DynComponent, game_object::serialize}, gl_types::vectors::Vec3, resources::serialization::{DeserializedType, dyn_deserialize}};
+use crate::engine::{game_object::{component::DynComponent, game_object::serialize}, gl_types::vectors::{Vec3, VecN}, resources::serialization::{DeserializedType, dyn_deserialize}};
 use derive_serialize::Serialize;
 use downcast_rs::Downcast;
 use itertools::{Either::{Left, Right}, Itertools};
+use rstar::{AABB, Envelope};
 use serde::{Deserialize as _, Serialize as _};
 
 use crate::{engine::{Engine, data_structures::{AllocationIndex, VecAllocator}, game_object::{error::{ComponentDowncastError, unions::{ComponentBorrowError, ComponentError, ObjectError}}, game_object::Transform}, graphics::Camera}, error::{Result}};
@@ -113,7 +114,7 @@ impl<T> ComponentID<T> {
 impl World {
     pub(in crate::engine) fn new() -> World {
         let mut objects = VecAllocator::new();
-        let root = objects.insert(GameObject { name: "root".to_owned(), parent: ObjectID { idx: AllocationIndex::null() }, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new() });
+        let root = objects.insert(GameObject { name: "root".to_owned(), parent: ObjectID { idx: AllocationIndex::null() }, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new(), bounding_box: None });
         let root = ObjectID { idx: root };
 
         let mut world = World {
@@ -313,7 +314,7 @@ impl World {
         Ok(())
     }
 
-    pub fn borrow_component<'a, C: Component>(&'a self, component: ComponentID<C>) -> Result<Ref<'a, C>, ComponentBorrowError> {
+    pub fn borrow_component<C: Component>(&self, component: ComponentID<C>) -> Result<Ref<'_, C>, ComponentBorrowError> {
         let ref_ = self.components.get(component.index)?.borrow();
 
         let downcast = Ref::filter_map(ref_, |t| {
@@ -323,7 +324,7 @@ impl World {
         Ok(downcast)
     }
 
-    pub fn borrow_component_mut<'a, C: Component>(&'a self, component: ComponentID<C>) -> Result<RefMut<'a, C>, ComponentBorrowError> {
+    pub fn borrow_component_mut<C: Component>(&self, component: ComponentID<C>) -> Result<RefMut<'_, C>, ComponentBorrowError> {
         let ref_ = self.components.get(component.index)?.borrow_mut();
 
         let downcast = RefMut::filter_map(ref_, |t| {
@@ -331,6 +332,14 @@ impl World {
         }).map_err(|_| ComponentDowncastError { type_name: std::any::type_name::<C>().to_owned() })?;
 
         Ok(downcast)
+    }
+
+    pub fn borrow_game_object(&self, object: ObjectID) -> Result<&GameObject, ObjectError> {
+        Ok(self.objects.get(object.idx)?)
+    }
+
+    pub fn borrow_game_object_mut(&mut self, object: ObjectID) -> Result<&mut GameObject, ObjectError> {
+        Ok(self.objects.get_mut(object.idx)?)
     }
 
     /// Creates a GameObject with the given parent.
@@ -342,7 +351,7 @@ impl World {
         self.objects.get(parent.idx)?;
 
         let name = name.into();
-        let new_obj = GameObject { name, parent: self.root, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new() };
+        let new_obj = GameObject { name, parent: self.root, position: Vec3::ZERO, rotation: Vec3::ZERO, scale: Vec3::ONE, components: Vec::new(), children: HashSet::new(), bounding_box: None };
         let new_obj = ObjectID { idx: self.objects.insert(new_obj) };
 
         self.set_parent(new_obj, Some(parent))?;
@@ -547,3 +556,33 @@ struct RootComponent {
 }
 
 impl Component for RootComponent {}
+
+pub struct Bounds {
+    bounds: AABB<[f32; 3]>
+}
+
+impl Bounds {
+    pub fn new(a: Vec3, b: Vec3) -> Bounds {
+        let bounds = AABB::from_corners(a.into(), b.into());
+
+        Bounds { bounds }
+    }
+
+    pub fn min(&self) -> Vec3 {
+        self.bounds.lower().into()
+    }
+
+    pub fn max(&self) -> Vec3 {
+        self.bounds.upper().into()
+    }
+
+    pub fn combine(&self, other: &Self) -> Self {
+        Self { bounds: self.bounds.merged(&other.bounds) }
+    }
+}
+
+impl Default for Bounds {
+    fn default() -> Self {
+        Self { bounds: AABB::from_point(Vec3::ZERO.into()) }
+    }
+}

@@ -110,10 +110,10 @@ impl Component for Sprite {
 
         let Some(sprite_sheet) = self.sprite_sheet_id else { return Ok(()) };
 
-        let transform = engine.world.get_transform(owner)?;
+        let object = engine.world.borrow_game_object(owner)?;
 
         engine.sprite_renderer.queue_sprite_instance(
-            SpriteData { position: *transform.position(), anchor: self.anchor, dimensions: transform.scale().xy(), sprite_id: self.sprite_index },
+            SpriteData { position: object.position, anchor: self.anchor, dimensions: object.scale.xy(), sprite_id: self.sprite_index },
             sprite_sheet
         );
 
@@ -158,7 +158,7 @@ impl Component for AnimatedSprite {
 
         let Some(id) = self.animated_sprite_id else { unreachable!() };
         
-        let transform = engine.world.get_transform(owner)?;
+        let transform = engine.world.borrow_game_object(owner)?;
 
         if !self.paused {
             let advance_frames = delta_time * self.framerate;
@@ -169,9 +169,9 @@ impl Component for AnimatedSprite {
         engine.sprite_renderer.queue_animated_sprite_instance(
             id,
             AnimatedSpriteData {
-                position: *transform.position(),
+                position: transform.position,
                 anchor: self.anchor,
-                dimensions: transform.scale().xy(),
+                dimensions: transform.scale.xy(),
                 frame
             },
         );

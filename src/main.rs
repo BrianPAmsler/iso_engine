@@ -147,25 +147,25 @@ impl Component for Renderer {
             camera.set_position(pos + vec3!(0, -1, 0) * delta_time * speed);
         }
 
-        let mut sprite = engine.world.get_transform(self.sprite2.try_unwrap()?)?;
+        let sprite = engine.world.borrow_game_object_mut(self.sprite2.try_unwrap()?)?;
         if engine.input.get_key_state(Key::ArrowUp).is_down {
-            *sprite.position_mut() += vec3!(0, 0, 1) * delta_time * speed;
+            sprite.position += vec3!(0, 0, 1) * delta_time * speed;
         }
 
         if engine.input.get_key_state(Key::ArrowLeft).is_down {
-            *sprite.position_mut() += vec3!(-1, 0, 0) * delta_time * speed;
+            sprite.position += vec3!(-1, 0, 0) * delta_time * speed;
         }
         if engine.input.get_key_state(Key::ArrowDown).is_down {
-            *sprite.position_mut() += vec3!(0, 0, -1) * delta_time * speed;
+            sprite.position += vec3!(0, 0, -1) * delta_time * speed;
         }
         if engine.input.get_key_state(Key::ArrowRight).is_down {
-            *sprite.position_mut() += vec3!(1, 0, 0) * delta_time * speed;
+            sprite.position += vec3!(1, 0, 0) * delta_time * speed;
         }
         if engine.input.get_key_state(Key::ShiftRight).is_down {
-            *sprite.position_mut() += vec3!(0, 1, 0) * delta_time * speed;
+            sprite.position += vec3!(0, 1, 0) * delta_time * speed;
         }
         if engine.input.get_key_state(Key::ControlRight).is_down {
-            *sprite.position_mut() += vec3!(0, -1, 0) * delta_time * speed;
+            sprite.position += vec3!(0, -1, 0) * delta_time * speed;
         }
 
         if engine.input.get_key_state(Key::KeyT).press {

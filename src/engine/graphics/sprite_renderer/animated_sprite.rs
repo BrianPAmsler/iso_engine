@@ -58,7 +58,7 @@ pub(in crate::engine::graphics) struct AnimatedSpriteData {
 
 impl From<AnimatedSpriteData> for vertex_shader::Sprite {
     fn from(value: AnimatedSpriteData) -> Self {
-        Self { position: value.position.as_array().into(), dimensions: vec4!(value.anchor, value.dimensions).as_array(), frame: value.frame }
+        Self { position: value.position.into_array().into(), dimensions: vec4!(value.anchor, value.dimensions).into_array(), frame: value.frame }
     }
 }
 

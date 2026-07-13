@@ -90,7 +90,7 @@ impl TerrainRenderer {
                     let fragment_uniforms = Subbuffer::new(fragment).reinterpret::<FragmentUniforms>();
                     
                     *fragment_uniforms.write()? = FragmentUniforms {
-                        viewPos: camera_pos.as_array(),
+                        viewPos: camera_pos.into_array(),
                         noiseMapSize: self.noise_texture.width() as i32,
                         ..Default::default()
                     };
