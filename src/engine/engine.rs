@@ -1,8 +1,8 @@
-use std::{rc::Rc, sync::Arc, time::{Duration, Instant}};
+use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{self, EventLoop}, monitor::MonitorHandle, platform::pump_events::EventLoopExtPumpEvents, window::{Fullscreen, Window, WindowAttributes}};
 
-use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::World, gl_types::{matrices::{Mat2, Mat3, Mat4}, vectors::{Vec2, Vec3, Vec4}}, graphics::{Graphics, sprite_renderer::{SpriteRenderer, components::{AnimatedSprite, AnimatedSpriteLoader, Sprite, SpriteSheet}}, terrain::{Terrain, terrain_renderer::TerrainRenderer}}, input::{self, Input, Key}, resources::ResourceManager}, error::{MessageErorr, Result, any::Error}, register_serializable_types};
+use crate::{engine::{error::{InvalidWindowState, NewEngineErorr}, game_object::{RootComponent, World}, gl_types::{matrices::{Mat2, Mat3, Mat4}, vectors::{Vec2, Vec3, Vec4}}, graphics::{Graphics, sprite_renderer::{SpriteRenderer, components::{AnimatedSprite, AnimatedSpriteLoader, Sprite, SpriteSheet}}, terrain::{Terrain, terrain_renderer::TerrainRenderer}}, hidden::__ComponentRegistration, input::{self, Input, Key}, resources::ResourceManager}, error::{MessageErorr, Result, any::Error}, register_serializable_types};
 
 #[derive(Debug)]
 pub enum WindowMode {
@@ -34,6 +34,7 @@ pub struct Engine {
     last_fixed_tick: f64,
     fixed_tick_overflow: f64,
     should_close: bool,
+    pub(in crate::engine) component_vec_constructors: HashMap<std::any::TypeId, Box<dyn Fn() -> Box<dyn super::game_object::ComponentVec>>>,
     _event_loop: Option<EventLoop<()>>
 }
 
@@ -126,7 +127,7 @@ impl ApplicationHandler for Engine {
 }
 
 impl Engine {
-    pub fn new(window_title: &str, width: u32, height: u32, window_mode: WindowMode) -> Result<Engine, NewEngineErorr> {
+    pub fn new(window_title: &str, width: u32, height: u32, window_mode: WindowMode, component_registry: ComponentRegistry) -> Result<Engine, NewEngineErorr> {
         let mut event_loop = EventLoop::new()?;
         event_loop.set_control_flow(event_loop::ControlFlow::Poll);
 
@@ -169,9 +170,27 @@ impl Engine {
         let terrain_renderer = TerrainRenderer::new(&mut gfx)?;
 
         // TODO: write a build script that finds all serializable types
-        register_serializable_types!(SpriteSheet, Sprite, AnimatedSprite, AnimatedSpriteLoader, Terrain, Mat2, Mat3, Mat4, Vec2, Vec3, Vec4);
+        register_serializable_types!(SpriteSheet, Sprite, AnimatedSprite, AnimatedSpriteLoader, Terrain, RootComponent, Mat2, Mat3, Mat4, Vec2, Vec3, Vec4);
+        let mut component_vec_constructors = register_components!(SpriteSheet, Sprite, AnimatedSprite, AnimatedSpriteLoader, Terrain, RootComponent).0;
+        component_vec_constructors.extend(component_registry.0);
 
-        let engine = Engine { window, gfx, world, input: Input::new(), resource_manager: ResourceManager::new(), sprite_renderer, terrain_renderer, error_queue: Vec::new(),fixed_tick_duration: 1.0 / 60.0, initialization_time: Instant::now(), last_tick: 0.0, last_fixed_tick: 0.0, fixed_tick_overflow: 0.0, should_close: false, _event_loop: Some(event_loop) };
+        let engine = Engine {
+            window,
+            gfx,
+            world,
+            input: Input::new(),
+            resource_manager: ResourceManager::new(),
+            sprite_renderer,
+            terrain_renderer,
+            error_queue: Vec::new(),fixed_tick_duration: 1.0 / 60.0,
+            initialization_time: Instant::now(),
+            last_tick: 0.0,
+            last_fixed_tick: 0.0,
+            fixed_tick_overflow: 0.0,
+            should_close: false,
+            _event_loop: Some(event_loop),
+            component_vec_constructors
+        };
 
         Ok(engine)
     }
@@ -278,4 +297,37 @@ pub mod error {
         InvalidWindowState
         as NewEngineErorr
     );
+}
+
+pub struct ComponentRegistry(HashMap<std::any::TypeId, Box<dyn Fn() -> Box<dyn super::game_object::ComponentVec>>>);
+
+impl ComponentRegistry {
+    #[doc(hidden)]
+    pub fn __new(registrations: impl IntoIterator<Item = __ComponentRegistration>) -> ComponentRegistry {
+        ComponentRegistry(registrations.into_iter().map(|r| (r.0, r.1)).collect())
+    }
+}
+
+#[macro_export]
+macro_rules! register_components {
+    ($($type:ty),*) => {
+        ::opengl_engine::engine::ComponentRegistry::__new([
+            $(::opengl_engine::engine::hidden::__register_component::<$type>()),*
+        ])
+    };
+}
+
+pub use register_components;
+
+#[doc(hidden)]
+pub mod hidden {
+    use std::{any::TypeId, cell::RefCell};
+
+    use crate::engine::{data_structures::VecAllocator, game_object::{ComponentVec, ObjectID, component::Component}};
+
+    pub struct __ComponentRegistration(pub(in crate::engine) TypeId, pub(in crate::engine) Box<dyn Fn() -> Box<dyn ComponentVec>>);
+
+    pub fn __register_component<C: Component>() -> __ComponentRegistration {
+        __ComponentRegistration(TypeId::of::<C>(), Box::new(|| Box::new(VecAllocator::<(ObjectID, RefCell<(bool, C)>)>::new())))
+    }
 }

@@ -3,7 +3,7 @@
 use std::{fs::{File, OpenOptions}, io::{BufReader, BufWriter}, sync::Arc};
 
 use derive_serialize::Serialize;
-use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::vec3}, graphics::terrain::Terrain, resources::serialization::AsSerialize}, register_serializable_types};
+use opengl_engine::{engine::{gl_types::{geometric::normalize, vectors::vec3}, graphics::terrain::Terrain, resources::serialization::AsSerialize}, register_components, register_serializable_types};
 use regex::Regex;
 
 use opengl_engine::{engine::{Engine, WindowMode, game_object::{ObjectID, component::Component}, graphics::{Camera, Projection}, input::Key}, error::{TryUnwrap, any::{Error, Result}}};
@@ -203,13 +203,14 @@ impl Component for DestroyTest {
 }
 
 fn start_game() -> Result<()> {
-    let mut engine = Engine::new("Test Window", 1280, 720, WindowMode::Windowed)?;
+    let component_registry = register_components!(Renderer, FPSCounter, DestroyTest);
+    let mut engine = Engine::new("Test Window", 1280, 720, WindowMode::Windowed, component_registry)?;
 
     register_serializable_types!(FPSCounter, Renderer);
 
     let save_file = BufReader::new(File::open("target/save.json")?);
     let mut deserializer = serde_json::Deserializer::new(IoRead::new(save_file));
-    engine.world.deserialize_object(None, &mut deserializer)?;
+    engine.world.deserialize_object(None, &mut deserializer)??;
 
     let o1 = engine.world.create_game_object("1", None)?;
     engine.world.add_component(o1, DestroyTest)?;

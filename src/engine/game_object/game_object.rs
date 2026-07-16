@@ -41,7 +41,7 @@ pub(in crate::engine) struct GameObject {
     pub position: Vec3,
     pub rotation: Vec3,
     pub scale: Vec3,
-    pub components: Vec<ComponentID<()>>,
+    pub components: Vec<ComponentID<super::Unknown>>,
     pub children: HashSet<ObjectID>
 }
 
@@ -71,13 +71,21 @@ pub(in crate::engine::game_object) mod serialize {
             let children = object.children.clone();
 
             let components = components.into_iter()
-                .filter_map(|component| world.components.get(component.index).ok())
                 .filter_map(|component| {
+                    #[allow(clippy::unwrap_used, reason = "If ComponentID exists, there must be a valid component_vec for it.")]
+                    let cell = world.components.get(&component.type_).unwrap();
+                    // TODO: Find a convenient way to trigger serialization outside of component updates so we don't have to use unsafe code.
                     #[allow(unsafe_code, reason =
                         "Not really that safe, but the game logic loop is single threaded so there is unlikely to be any major issues.
                         This can only really be called from a component body, so borrow() will always fail when deserializing the calling component."
                     )]
-                    let component = unsafe { & *component.as_ptr()};
+                    unsafe {
+                        let components = &mut *cell.get(); // This unsafe cell is always going to require unsafe, but we can manually ensure that it only ever gets borrowed mutably once at a time. Nested RefCells get way too clunky.
+
+                        components.get_unchecked(component).ok()
+                    }
+                })
+                .filter_map(|component| {
                     let serialize = component.as_serialize()?;
 
                     Some(serialize.serialize())
