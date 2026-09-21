@@ -1,1 +1,1 @@
-Now migrated to Vulkan, so the title opengl_engine is a misnomer.
+Vulkan game engine designed for top-down isometric gameplay with 2D sprites.
